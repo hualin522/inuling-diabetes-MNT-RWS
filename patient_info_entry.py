@@ -116,48 +116,48 @@ def patient_info_entry():
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
         # ===== 1. 用户基本信息 =====
         with st.expander("1️⃣ 用户基本信息", expanded=True):
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        name = st.text_input("患者姓名 *")
-        gender = st.selectbox("性别", ["男", "女"])
-        phone = st.text_input("联系电话")
-    with col2:
-        birth_date = st.date_input("出生日期", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
-        age_mode = st.radio("年龄输入方式", ["自动计算", "手动输入"], horizontal=True, key="age_mode_radio")
-        
-        # 使用容器动态显示不同的输入组件
-        age_container = st.empty()
-        age_value = None
-        if age_mode == "自动计算":
-            auto_age = calculate_age(birth_date) if birth_date else None
-            display_age = f"{auto_age}" if auto_age is not None else "待填写"
-            age_container.text_input("年龄（岁）", value=display_age, disabled=True, key="age_auto_display")
-            age_value = auto_age
-        else:
-            manual_age = age_container.number_input("年龄（岁）", min_value=0, max_value=120, step=1, key="age_manual_number", value=0)
-            age_value = manual_age
-            warn_range("年龄", age_value, 0, 120, "岁")
-    with col3:
-        diagnosis_date = st.date_input("确诊日期/年月日", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
-        disease_mode = st.radio("病史年输入方式", ["自动计算", "手动输入"], horizontal=True, key="disease_mode_radio")
-        
-        disease_container = st.empty()
-        disease_years_value = None
-        if disease_mode == "自动计算":
-            auto_disease = calculate_disease_years(diagnosis_date) if diagnosis_date else None
-            display_disease = f"{auto_disease}" if auto_disease is not None else "待填写"
-            disease_container.text_input("病史/年", value=display_disease, disabled=True, key="disease_auto_display")
-            disease_years_value = auto_disease
-        else:
-            manual_disease = disease_container.number_input("病史/年", min_value=0.0, max_value=80.0, step=0.5, key="disease_manual_number", value=0.0)
-            disease_years_value = manual_disease
-            warn_range("病史年", disease_years_value, 0, 80, "年")
-        # 确诊日期不能晚于今天
-        warn_date_logic("确诊日期", diagnosis_date, allow_future=False)
-    with col4:
-        location = st.text_input("所在地/省/市/区")
-        complications = st.text_input("并发症 (若无填无)")
-        other_chronic = st.text_input("其他慢病")   
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                name = st.text_input("患者姓名 *")
+                gender = st.selectbox("性别", ["男", "女"])
+                phone = st.text_input("联系电话")
+            with col2:
+                birth_date = st.date_input("出生日期", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
+                age_mode = st.radio("年龄输入方式", ["自动计算", "手动输入"], horizontal=True, key="age_mode_radio")
+                
+                # 年龄值的获取（修复变量作用域）
+                age_value = None
+                if age_mode == "自动计算":
+                    # 自动计算模式：显示禁用文本框
+                    auto_age = calculate_age(birth_date) if birth_date else None
+                    display_age = f"{auto_age}" if auto_age is not None else "待填写"
+                    st.text_input("年龄（岁）", value=display_age, disabled=True, key="age_auto_display")
+                    age_value = auto_age
+                else:  # 手动输入模式
+                    age_value = st.number_input("年龄（岁）", min_value=0, max_value=120, step=1, key="age_manual_number", value=0)
+                    warn_range("年龄", age_value, 0, 120, "岁")
+            with col3:
+                diagnosis_date = st.date_input("确诊日期/年月日", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
+                disease_mode = st.radio("病史年输入方式", ["自动计算", "手动输入"], horizontal=True, key="disease_mode_radio")
+                
+                disease_years_value = None
+                if disease_mode == "自动计算":
+                    auto_disease = calculate_disease_years(diagnosis_date) if diagnosis_date else None
+                    display_disease = f"{auto_disease}" if auto_disease is not None else "待填写"
+                    st.text_input("病史/年", value=display_disease, disabled=True, key="disease_auto_display")
+                    disease_years_value = auto_disease
+                else:  # 手动输入模式
+                    disease_years_value = st.number_input("病史/年", min_value=0.0, max_value=80.0, step=0.5, key="disease_manual_number", value=0.0)
+                    warn_range("病史年", disease_years_value, 0, 80, "年")
+                # 确诊日期不能晚于今天
+                warn_date_logic("确诊日期", diagnosis_date, allow_future=False)
+            with col4:
+                location = st.text_input("所在地/省/市/区")
+                complications = st.text_input("并发症 (若无填无)")
+                other_chronic = st.text_input("其他慢病")
+
+            # 调试信息（可选，正式使用可删除）
+            st.caption(f"调试：年龄模式={age_mode}, 年龄值={age_value}; 病史模式={disease_mode}, 病史值={disease_years_value}")
 
         # ===== 2. 干预前基本指标 =====
         with st.expander("2️⃣ 干预前基本指标", expanded=False):
@@ -173,7 +173,7 @@ def patient_info_entry():
                 pre_waist = st.number_input("腰围 (cm)", min_value=50.0, max_value=200.0, step=0.1)
                 pre_hip = st.number_input("臀围 (cm)", min_value=50.0, max_value=200.0, step=0.1)
                 pre_sbp = st.number_input("高压 (mmHg)", min_value=50, max_value=250, step=1)
-                pre_dbp = st.number_input("低压 (mmHg)", min_value=30, max_value=160, step=1)
+                pre_dbp = st.number_input("低压 (mmHg)", min_value=30, max_value=150, step=1)
                 warn_range("腰围(前)", pre_waist, 50, 200, "cm")
                 warn_range("臀围(前)", pre_hip, 50, 200, "cm")
                 warn_range("高压(前)", pre_sbp, 70, 200, "mmHg")
