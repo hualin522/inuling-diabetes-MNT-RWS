@@ -115,8 +115,8 @@ def patient_info_entry():
     # 使用表单实现一次性提交
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
         # ===== 1. 用户基本信息 =====
-    with st.expander("1️⃣ 用户基本信息", expanded=True):
-        col1, col2, col3, col4 = st.columns(4)
+        with st.expander("1️⃣ 用户基本信息", expanded=True):
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         name = st.text_input("患者姓名 *")
         gender = st.selectbox("性别", ["男", "女"])
@@ -157,7 +157,7 @@ def patient_info_entry():
     with col4:
         location = st.text_input("所在地/省/市/区")
         complications = st.text_input("并发症 (若无填无)")
-        other_chronic = st.text_input("其他慢病")
+        other_chronic = st.text_input("其他慢病")   
 
         # ===== 2. 干预前基本指标 =====
         with st.expander("2️⃣ 干预前基本指标", expanded=False):
