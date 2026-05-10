@@ -132,12 +132,16 @@ def save_to_google_sheets(patient_dict):
 
         flat = flatten_dict(patient_dict)
 
-        # 若表格为空，先写入表头
-        if sheet.row_count == 0 or (sheet.row_count == 1 and not sheet.row_values(1)):
-            sheet.append_row(list(flat.keys()))
+        # 🔧 修复：直接检查第一行是否全空
+        header_row = sheet.row_values(1)
+        if not header_row or all(cell == '' for cell in header_row):
+            # 第一行全空 → 写入表头
+            header_to_write = list(flat.keys())
+            sheet.append_row(header_to_write)
+            header_row = header_to_write  # 更新内存中的表头
 
-        header = sheet.row_values(1)
-        row_data = [flat.get(col, "") for col in header]
+        # 生成数据行（按表头顺序）
+        row_data = [flat.get(col, "") for col in header_row]
         sheet.append_row(row_data)
         st.success("✅ 数据已同步至 Google Sheets")
     except Exception as e:
