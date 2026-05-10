@@ -3,9 +3,11 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date
 import plotly.graph_objects as go
+import gspread
+from google.oauth2 import service_account
 
 # ============================================
-# 自动计算函数（不使用 dateutil）
+# 自动计算函数
 # ============================================
 def calculate_age(birth_date):
     """根据出生日期计算周岁年龄"""
@@ -69,7 +71,6 @@ def plot_glucose_curve(glucose_values, title):
     if not all(glucose_values):
         return None, None
     times = [0, 0.5, 1, 2, 3]
-    # AUC梯形法
     auc = 0
     for i in range(len(times)-1):
         auc += (glucose_values[i] + glucose_values[i+1]) / 2 * (times[i+1] - times[i])
@@ -80,7 +81,7 @@ def plot_glucose_curve(glucose_values, title):
         xaxis_title='时间 (小时)',
         yaxis_title='血糖 (mmol/L)',
         xaxis=dict(tickmode='array', tickvals=times, ticktext=['空腹','0.5h','1h','2h','3h']),
-        yaxis=dict(range=[0, max(glucose_values) * 1.05])  # 纵轴从0开始，上限=最高值*1.05
+        yaxis=dict(range=[0, max(glucose_values) * 1.05])
     )
     return fig, round(auc, 2)
 
@@ -89,7 +90,7 @@ def plot_glucose_curve(glucose_values, title):
 # ============================================
 def warn_range(label, value, min_val, max_val, unit=""):
     """若值超出范围，在界面显示警告"""
-    if value is not None and value != 0:   # 0 可能表示未填，需灵活处理
+    if value is not None and value != 0:
         if value < min_val or value > max_val:
             st.warning(f"⚠️ {label}：{value}{unit} 超出合理范围（{min_val}-{max_val}{unit}）")
 
@@ -102,6 +103,45 @@ def warn_date_logic(label, target_date, reference_date=None, allow_future=False)
         st.warning(f"⚠️ {label} {target_date} 不能晚于今天")
     if reference_date and target_date < reference_date:
         st.warning(f"⚠️ {label} {target_date} 不应早于参考日期 {reference_date}")
+
+# ============================================
+# Google Sheets 辅助函数
+# ============================================
+def flatten_dict(d, parent_key='', sep='_'):
+    """递归展开字典，列表和子字典转为字符串表示"""
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            items.append((new_key, str(v)))
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+def save_to_google_sheets(patient_dict):
+    """将一条患者数据追加到 Google Sheets"""
+    try:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        client = gspread.authorize(credentials)
+        sheet = client.open_by_key(st.secrets["google_sheets"]["spreadsheet_id"]).sheet1
+
+        flat = flatten_dict(patient_dict)
+
+        # 若表格为空，先写入表头
+        if sheet.row_count == 0 or (sheet.row_count == 1 and not sheet.row_values(1)):
+            sheet.append_row(list(flat.keys()))
+
+        header = sheet.row_values(1)
+        row_data = [flat.get(col, "") for col in header]
+        sheet.append_row(row_data)
+        st.success("✅ 数据已同步至 Google Sheets")
+    except Exception as e:
+        st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
 
 # ============================================
 # 信息录入主界面
@@ -124,40 +164,47 @@ def patient_info_entry():
             with col2:
                 birth_date = st.date_input("出生日期", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
                 age_mode = st.radio("年龄输入方式", ["自动计算", "手动输入"], horizontal=True, key="age_mode_radio")
-                
-                # 年龄值的获取（修复变量作用域）
-                age_value = None
-                if age_mode == "自动计算":
-                    # 自动计算模式：显示禁用文本框
-                    auto_age = calculate_age(birth_date) if birth_date else None
-                    display_age = f"{auto_age}" if auto_age is not None else "待填写"
-                    st.text_input("年龄（岁）", value=display_age, disabled=True, key="age_auto_display")
-                    age_value = auto_age
-                else:  # 手动输入模式
-                    age_value = st.number_input("年龄（岁）", min_value=0, max_value=120, step=1, key="age_manual_number", value=0)
+
+                # 修复：统一使用一个 number_input，通过 disabled 控制
+                auto_age = calculate_age(birth_date)
+                if age_mode == "自动计算" and auto_age is not None:
+                    st.session_state.age_calc = auto_age
+                if age_mode == "手动输入" and "age_calc" not in st.session_state:
+                    st.session_state.age_calc = 0
+
+                age_value = st.number_input(
+                    "年龄（岁）",
+                    min_value=0, max_value=120, step=1,
+                    value=st.session_state.get("age_calc", 0),
+                    disabled=(age_mode == "自动计算"),
+                    key="age_calc"
+                )
+                if age_value is not None and age_value != 0:
                     warn_range("年龄", age_value, 0, 120, "岁")
             with col3:
                 diagnosis_date = st.date_input("确诊日期/年月日", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
                 disease_mode = st.radio("病史年输入方式", ["自动计算", "手动输入"], horizontal=True, key="disease_mode_radio")
-                
-                disease_years_value = None
-                if disease_mode == "自动计算":
-                    auto_disease = calculate_disease_years(diagnosis_date) if diagnosis_date else None
-                    display_disease = f"{auto_disease}" if auto_disease is not None else "待填写"
-                    st.text_input("病史/年", value=display_disease, disabled=True, key="disease_auto_display")
-                    disease_years_value = auto_disease
-                else:  # 手动输入模式
-                    disease_years_value = st.number_input("病史/年", min_value=0.0, max_value=80.0, step=0.5, key="disease_manual_number", value=0.0)
+
+                auto_disease = calculate_disease_years(diagnosis_date)
+                if disease_mode == "自动计算" and auto_disease is not None:
+                    st.session_state.disease_calc = auto_disease
+                if disease_mode == "手动输入" and "disease_calc" not in st.session_state:
+                    st.session_state.disease_calc = 0.0
+
+                disease_years_value = st.number_input(
+                    "病史/年",
+                    min_value=0.0, max_value=80.0, step=0.5,
+                    value=st.session_state.get("disease_calc", 0.0),
+                    disabled=(disease_mode == "自动计算"),
+                    key="disease_calc"
+                )
+                if disease_years_value is not None and disease_years_value != 0.0:
                     warn_range("病史年", disease_years_value, 0, 80, "年")
-                # 确诊日期不能晚于今天
                 warn_date_logic("确诊日期", diagnosis_date, allow_future=False)
             with col4:
                 location = st.text_input("所在地/省/市/区")
                 complications = st.text_input("并发症 (若无填无)")
                 other_chronic = st.text_input("其他慢病")
-
-            # 调试信息（可选，正式使用可删除）
-            st.caption(f"调试：年龄模式={age_mode}, 年龄值={age_value}; 病史模式={disease_mode}, 病史值={disease_years_value}")
 
         # ===== 2. 干预前基本指标 =====
         with st.expander("2️⃣ 干预前基本指标", expanded=False):
@@ -424,16 +471,15 @@ def patient_info_entry():
                 post_pg180 = st.number_input("PG 180min (mmol/L)", min_value=0.0, step=0.1, key="post_180")
                 warn_range("PG180(后)", post_pg180, 2, 30, "mmol/L")
 
-        # ===== 13. 干预方案 =====
+        # ===== 13. 干预方案（修改后） =====
         with st.expander("1️⃣3️⃣ 干预方案", expanded=False):
             intervention_type = st.selectbox("营养治疗方案", ["畅快", "纽畅", "纽畅B", "其他营养治疗"], key="intervention_type")
-            duration_days = calculate_duration(pre_glyc_date, post_glyc_date)
-            if duration_days is not None:
-                st.text_input("干预时长 (自动计算/天)", value=f"{duration_days} 天", disabled=True, key="duration_display")
-            else:
-                st.text_input("干预时长 (自动计算/天)", value="无法计算", disabled=True, key="duration_display")
-                if not pre_glyc_date or not post_glyc_date:
-                    st.info("请填写干预前和干预后5点血糖检测日期，系统将自动计算干预时长")
+            intervention_detail = st.text_area(
+                "方案细节（用量/用法/周期等）",
+                placeholder="例如：纽畅B 每日2次，每次1包，餐后服用",
+                key="intervention_detail"
+            )
+            # 不再显示干预时长窗口
 
         # ===== 14. 干预前日常7点血糖 =====
         with st.expander("1️⃣4️⃣ 干预前日常7点血糖", expanded=False):
@@ -509,6 +555,9 @@ def patient_info_entry():
             if not name:
                 st.error("患者姓名不能为空")
                 st.stop()
+
+            # 计算干预时长（后台计算，不展示）
+            duration_days = calculate_duration(pre_glyc_date, post_glyc_date)
 
             # 解析其他药物
             pre_other_list = parse_other_meds(pre_other_meds)
@@ -595,6 +644,7 @@ def patient_info_entry():
                 "干预后PG120": post_pg120,
                 "干预后PG180": post_pg180,
                 "干预方案": intervention_type,
+                "干预方案细节": intervention_detail,   # 新增字段
                 "干预时长(天)": duration_days,
                 "干预前7点日期": pre_7_date,
                 "干预前早餐前": pre_bf_before,
@@ -623,6 +673,13 @@ def patient_info_entry():
 
             st.session_state.patients.append(patient_data)
             st.success(f"✅ 患者 {name} 的信息已成功录入！")
+
+            # 同步至 Google Sheets（仅在 secrets 配置后生效）
+            if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
+                save_to_google_sheets(patient_data)
+            else:
+                st.info("💡 提示：配置 Google Sheets 后数据将自动云端汇总")
+
             st.balloons()
 
     # ===== 显示已录入患者列表 =====
@@ -638,20 +695,23 @@ def patient_info_entry():
         csv = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 导出全部数据为 CSV", data=csv, file_name="patients_data.csv", mime="text/csv")
 
-    # ===== 新增：血糖曲线分析（折线图 + AUC） =====
+    # ===== 血糖曲线分析 =====
     st.subheader("📈 患者血糖曲线分析")
     if len(st.session_state.patients) > 0:
-        selected_patient_name = st.selectbox("选择患者查看血糖曲线", [p["患者姓名"] for p in st.session_state.patients], key="glucose_analysis")
+        selected_patient_name = st.selectbox(
+            "选择患者查看血糖曲线",
+            [p["患者姓名"] for p in st.session_state.patients],
+            key="glucose_analysis"
+        )
         patient = next(p for p in st.session_state.patients if p["患者姓名"] == selected_patient_name)
 
-        # 干预前
         pre_values = [
             patient.get("干预前FPG"), patient.get("干预前PG30"),
             patient.get("干预前PG60"), patient.get("干预前PG120"),
             patient.get("干预前PG180")
         ]
         pre_fig, pre_auc = plot_glucose_curve(pre_values, f"{selected_patient_name} - 干预前")
-        # 干预后
+
         post_values = [
             patient.get("干预后FPG"), patient.get("干预后PG30"),
             patient.get("干预后PG60"), patient.get("干预后PG120"),
