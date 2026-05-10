@@ -10,6 +10,8 @@ langchain-text-splitters
 langchain-huggingface
 langchain-deepseek
 langchain-core
+langchain-classic
 sentence-transformers
 faiss-cpu
 pypdf
+torchvision

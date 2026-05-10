@@ -5,8 +5,9 @@ from datetime import datetime, date
 import plotly.graph_objects as go
 import os
 
-# 依赖自检（保持原样）
+# ===== 依赖自检（精简版，避免误报） =====
 missing_pkgs = []
+# 只检查最常见的可能缺失包，跳过那些会自动随父包安装的模块
 required_pkgs = {
     "gspread": "gspread",
     "google.oauth2": "google-auth",
@@ -15,10 +16,10 @@ required_pkgs = {
     "langchain_huggingface": "langchain-huggingface",
     "langchain_deepseek": "langchain-deepseek",
     "langchain_core": "langchain-core",
-    "langchain.chains": "langchain-classic",   # 已包含在 langchain 元包中
     "sentence_transformers": "sentence-transformers",
     "faiss": "faiss-cpu",
     "pypdf": "pypdf",
+    "torchvision": "torchvision",   # 明确检查
 }
 for mod, pkg in required_pkgs.items():
     try:
@@ -34,12 +35,15 @@ if missing_pkgs:
     )
     st.stop()
 
-# 正确的导入（兼容 langchain ≥ 1.0）
+# 动态导入（兼容 langchain ≥ 1.0）
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains.combine_documents import create_retrieval_chain, create_stuff_documents_chain
+from langchain.chains.combine_documents import (
+    create_retrieval_chain,
+    create_stuff_documents_chain,
+)
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_deepseek import ChatDeepSeek
 import gspread
