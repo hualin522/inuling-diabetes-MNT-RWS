@@ -188,8 +188,6 @@ def patient_info_entry():
                     disabled=age_disabled,
                     key="age_manual"
                 )
-                if not age_disabled and age_value is not None:
-                    st.session_state.age_manual = age_value
                 if age_mode == "自动计算":
                     age_value = auto_age
                 if age_value is not None and age_value != 0:
@@ -211,8 +209,6 @@ def patient_info_entry():
                     disabled=disease_disabled,
                     key="disease_manual"
                 )
-                if not disease_disabled and disease_years_value is not None:
-                    st.session_state.disease_manual = disease_years_value
                 if disease_mode == "自动计算":
                     disease_years_value = auto_disease
                 if disease_years_value is not None and disease_years_value != 0.0:
