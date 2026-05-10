@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, date
+from datetime import date, datetime
 import plotly.graph_objects as go
 import gspread
 from google.oauth2 import service_account
@@ -108,14 +108,20 @@ def warn_date_logic(label, target_date, reference_date=None, allow_future=False)
 # Google Sheets 辅助函数
 # ============================================
 def flatten_dict(d, parent_key='', sep='_'):
-    """递归展开字典，列表和子字典转为字符串表示"""
+    """递归展开字典，将不可序列化的类型转换为字符串"""
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        
         if isinstance(v, dict):
             items.extend(flatten_dict(v, new_key, sep=sep).items())
         elif isinstance(v, list):
             items.append((new_key, str(v)))
+        elif isinstance(v, (date, datetime)):
+            # 将日期/时间类型转为 ISO 字符串
+            items.append((new_key, v.isoformat()))
+        elif v is None:
+            items.append((new_key, ""))
         else:
             items.append((new_key, v))
     return dict(items)
@@ -132,15 +138,14 @@ def save_to_google_sheets(patient_dict):
 
         flat = flatten_dict(patient_dict)
 
-        # 🔧 修复：直接检查第一行是否全空
+        # 检查表头是否已存在（第一行全空则写入）
         header_row = sheet.row_values(1)
         if not header_row or all(cell == '' for cell in header_row):
-            # 第一行全空 → 写入表头
             header_to_write = list(flat.keys())
             sheet.append_row(header_to_write)
-            header_row = header_to_write  # 更新内存中的表头
+            header_row = header_to_write
 
-        # 生成数据行（按表头顺序）
+        # 按表头顺序构造数据行
         row_data = [flat.get(col, "") for col in header_row]
         sheet.append_row(row_data)
         st.success("✅ 数据已同步至 Google Sheets")
