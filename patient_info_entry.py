@@ -5,7 +5,7 @@ from datetime import datetime, date
 import plotly.graph_objects as go
 import os
 
-# ===== 依赖自检 =====
+# 依赖自检（保持原样）
 missing_pkgs = []
 required_pkgs = {
     "gspread": "gspread",
@@ -15,7 +15,7 @@ required_pkgs = {
     "langchain_huggingface": "langchain-huggingface",
     "langchain_deepseek": "langchain-deepseek",
     "langchain_core": "langchain-core",
-    "langchain.chains": "langchain",
+    "langchain.chains": "langchain-classic",   # 已包含在 langchain 元包中
     "sentence_transformers": "sentence-transformers",
     "faiss": "faiss-cpu",
     "pypdf": "pypdf",
@@ -28,19 +28,18 @@ for mod, pkg in required_pkgs.items():
 
 if missing_pkgs:
     st.error(
-        f"❌ 缺少必要的 Python 包，请在 requirements.txt 中添加以下依赖:\n\n"
+        "❌ 缺少必要的 Python 包，请在 requirements.txt 中添加以下依赖:\n\n"
         + "\n".join(missing_pkgs)
         + "\n\n然后重新部署应用。"
     )
     st.stop()
 
-# 动态导入（确保检查通过后再导入）
+# 正确的导入（兼容 langchain ≥ 1.0）
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains.combine_documents import create_retrieval_chain, create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_deepseek import ChatDeepSeek
 import gspread
