@@ -3,11 +3,38 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, date
 import plotly.graph_objects as go
-import gspread
-from google.oauth2 import service_account
 import os
 
-# ===== LangChain 相关 =====
+# ===== 依赖自检 =====
+missing_pkgs = []
+required_pkgs = {
+    "gspread": "gspread",
+    "google.oauth2": "google-auth",
+    "langchain_community": "langchain-community",
+    "langchain_text_splitters": "langchain-text-splitters",
+    "langchain_huggingface": "langchain-huggingface",
+    "langchain_deepseek": "langchain-deepseek",
+    "langchain_core": "langchain-core",
+    "langchain.chains": "langchain",
+    "sentence_transformers": "sentence-transformers",
+    "faiss": "faiss-cpu",
+    "pypdf": "pypdf",
+}
+for mod, pkg in required_pkgs.items():
+    try:
+        __import__(mod)
+    except ImportError:
+        missing_pkgs.append(pkg)
+
+if missing_pkgs:
+    st.error(
+        f"❌ 缺少必要的 Python 包，请在 requirements.txt 中添加以下依赖:\n\n"
+        + "\n".join(missing_pkgs)
+        + "\n\n然后重新部署应用。"
+    )
+    st.stop()
+
+# 动态导入（确保检查通过后再导入）
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -16,6 +43,8 @@ from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_deepseek import ChatDeepSeek
+import gspread
+from google.oauth2 import service_account
 
 # ============================================
 # 自动计算函数
@@ -156,7 +185,7 @@ def save_to_google_sheets(patient_dict):
         st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
 
 # ============================================
-# 新增：DeepSeek + 本地知识库问答模块
+# DeepSeek + 本地知识库问答模块
 # ============================================
 
 # ---------- 1. 加载本地知识库（缓存） ----------
@@ -182,17 +211,14 @@ def load_knowledge_base(pdf_dir="pdf_data"):
     embedding = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
-    # 创建 FAISS 数据库（不持久化到磁盘，节省空间；如需持久化可指定 persist_directory）
     vectordb = FAISS.from_documents(chunks, embedding)
     return vectordb
 
 # ---------- 2. 构建 RAG 问答链 ----------
 def build_rag_chain(vectordb):
     """创建检索 + 生成链"""
-    # 检索器
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
     
-    # 提示词模板（将患者数据动态注入）
     template = """
 你是一位资深的临床营养师，专攻应用菊粉类益生元等营养补充方式进行糖尿病营养管理。请根据以下资料回答问题：
 1. 本地专业文档
@@ -224,14 +250,18 @@ BMI：{bmi}
 """
     prompt = ChatPromptTemplate.from_template(template)
     
-    # DeepSeek 聊天模型
+    # API Key 保护
+    api_key = st.secrets.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        st.error("❌ 请在 Streamlit Secrets 中设置 DEEPSEEK_API_KEY")
+        st.stop()
+    
     llm = ChatDeepSeek(
         model="deepseek-chat",
-        api_key=st.secrets["DEEPSEEK_API_KEY"],
+        api_key=api_key,
         temperature=0.3
     )
     
-    # 构建链
     combine_docs_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, combine_docs_chain)
     return rag_chain
@@ -245,7 +275,7 @@ def generate_plan(patient_data: dict) -> str:
     
     rag_chain = build_rag_chain(vectordb)
     
-    # 构造输入（提取必要字段，缺失则填“未知”）
+    # 构造输入（缺失则填“未知”）
     input_data = {
         "height": patient_data.get("干预前身高", "未知"),
         "weight": patient_data.get("干预前体重", "未知"),
@@ -261,12 +291,10 @@ def generate_plan(patient_data: dict) -> str:
         "complications": patient_data.get("并发症", "无"),
     }
     
-    # 调用链
     result = rag_chain.invoke({
         "input": "请为这位糖尿病患者制定个体化的营养治疗方案，并预测可能的效果",
         "height": input_data["height"],
         "weight": input_data["weight"],
-        # ... 依次传入所有关键字段（必须与模板中变量名一致）
         "bmi": input_data["bmi"],
         "waist": input_data["waist"],
         "sbp": input_data["sbp"],
@@ -290,7 +318,7 @@ def patient_info_entry():
     if "patients" not in st.session_state:
         st.session_state.patients = []
 
-    # ---- 将年龄/病史输入方式移到表单外，确保实时切换 ----
+    # ---- 将年龄/病史输入方式移到表单外 ----
     st.subheader("基本信息输入方式")
     col_mode1, col_mode2 = st.columns(2)
     with col_mode1:
@@ -298,6 +326,12 @@ def patient_info_entry():
     with col_mode2:
         disease_mode = st.radio("病史年输入方式", ["自动计算", "手动输入"], horizontal=True, key="disease_mode_radio")
     st.markdown("---")
+
+    # 手动输入时年龄和病史的 session_state 初始化
+    if "age_manual" not in st.session_state:
+        st.session_state.age_manual = 0
+    if "disease_manual" not in st.session_state:
+        st.session_state.disease_manual = 0.0
 
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
         # ===== 1. 用户基本信息 =====
@@ -309,47 +343,46 @@ def patient_info_entry():
                 phone = st.text_input("联系电话")
             with col2:
                 birth_date = st.date_input("出生日期", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
-                # 年龄输入（根据表单外 radio 控制 disabled）
                 auto_age = calculate_age(birth_date)
                 if age_mode == "自动计算":
-                    age_display = auto_age
                     age_disabled = True
+                    age_value = auto_age if auto_age is not None else 0
                 else:
-                    age_display = st.session_state.get("age_manual", 0)
                     age_disabled = False
+                    age_value = st.session_state.age_manual
 
-                age_value = st.number_input(
+                age_input = st.number_input(
                     "年龄（岁）",
                     min_value=0, max_value=120, step=1,
-                    value=age_display if age_display is not None else 0,
+                    value=age_value,
                     disabled=age_disabled,
                     key="age_manual"
                 )
                 if age_mode == "自动计算":
-                    age_value = auto_age
-                if age_value is not None and age_value != 0:
-                    warn_range("年龄", age_value, 0, 120, "岁")
+                    age_input = auto_age
+                if age_input is not None and age_input != 0:
+                    warn_range("年龄", age_input, 0, 120, "岁")
             with col3:
                 diagnosis_date = st.date_input("确诊日期/年月日", value=None, min_value=date(1900, 1, 1), format="YYYY-MM-DD")
                 auto_disease = calculate_disease_years(diagnosis_date)
                 if disease_mode == "自动计算":
-                    disease_display = auto_disease
                     disease_disabled = True
+                    disease_value = auto_disease if auto_disease is not None else 0.0
                 else:
-                    disease_display = st.session_state.get("disease_manual", 0.0)
                     disease_disabled = False
+                    disease_value = st.session_state.disease_manual
 
-                disease_years_value = st.number_input(
+                disease_input = st.number_input(
                     "病史/年",
                     min_value=0.0, max_value=80.0, step=0.5,
-                    value=disease_display if disease_display is not None else 0.0,
+                    value=disease_value,
                     disabled=disease_disabled,
                     key="disease_manual"
                 )
                 if disease_mode == "自动计算":
-                    disease_years_value = auto_disease
-                if disease_years_value is not None and disease_years_value != 0.0:
-                    warn_range("病史年", disease_years_value, 0, 80, "年")
+                    disease_input = auto_disease
+                if disease_input is not None and disease_input != 0.0:
+                    warn_range("病史年", disease_input, 0, 80, "年")
                 warn_date_logic("确诊日期", diagnosis_date, allow_future=False)
             with col4:
                 location = st.text_input("所在地/省/市/区")
@@ -720,9 +753,9 @@ def patient_info_entry():
                 "所在地": location,
                 "性别": gender,
                 "出生日期": birth_date,
-                "年龄": age_value,
+                "年龄": age_input,
                 "确诊日期": diagnosis_date,
-                "病史年": disease_years_value,
+                "病史年": disease_input,
                 "并发症": complications,
                 "其他慢病": other_chronic,
                 "干预前身高": pre_height,
@@ -821,26 +854,8 @@ def patient_info_entry():
             }
 
             st.session_state.patients.append(patient_data)
+            st.session_state.last_patient = patient_data   # 保存最后一次提交的患者
             st.success(f"✅ 患者 {name} 的信息已成功录入！")
-
-                # ===== 新增：AI 方案建议模块 =====
-            st.markdown("---")
-            st.subheader("🤖 AI 智能方案建议")
-    # 将当前患者数据暂存到 session_state，供按钮触发使用
-            st.session_state.last_patient = patient_data
-    
-            if st.button("生成个体化营养治疗方案", key="gen_plan_btn"):
-                with st.spinner("正在分析患者数据并检索知识库..."):
-                    try:
-                        plan = generate_plan(st.session_state.last_patient)
-                        st.session_state.ai_plan = plan
-                    except Exception as e:
-                        st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
-    
-    # 显示生成结果（如果已有）
-            if st.session_state.get("ai_plan"):
-                st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
-        
 
             # 同步至 Google Sheets
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
@@ -849,6 +864,24 @@ def patient_info_entry():
                 st.info("💡 提示：配置 Google Sheets 后数据将自动云端汇总")
 
             st.balloons()
+
+    # ===== AI 方案建议（移到表单外部，通过 last_patient 触发） =====
+    if st.session_state.get("last_patient"):
+        st.markdown("---")
+        st.subheader("🤖 AI 智能方案建议")
+        patient_for_plan = st.session_state.last_patient
+        st.write(f"当前患者：**{patient_for_plan.get('患者姓名', '未知')}**")
+
+        if st.button("生成个体化营养治疗方案", key="gen_plan_btn"):
+            with st.spinner("正在分析患者数据并检索知识库..."):
+                try:
+                    plan = generate_plan(patient_for_plan)
+                    st.session_state.ai_plan = plan
+                except Exception as e:
+                    st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
+
+        if st.session_state.get("ai_plan"):
+            st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
 
     # ===== 显示已录入患者列表 =====
     st.subheader("📋 已录入患者列表")
