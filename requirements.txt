@@ -10,3 +10,4 @@ langchain-chroma
 langchain-huggingface
 pypdf
 sentence-transformers
+torchvision
