@@ -1,9 +1,10 @@
 import streamlit as st
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
+from langchain_community.vectorstores import FAISS        # 改用 FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import create_retrieval_chain, create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_deepseek import ChatDeepSeek
 import os
@@ -168,7 +169,7 @@ from langchain_deepseek import ChatDeepSeek
 # ---------- 1. 加载本地知识库（缓存） ----------
 @st.cache_resource
 def load_knowledge_base(pdf_dir="pdf_data"):
-    """加载所有 PDF 文件并创建向量数据库"""
+    """加载 PDF 并创建 FAISS 向量数据库"""
     if not os.path.exists(pdf_dir):
         st.error(f"知识库目录 {pdf_dir} 不存在，请创建并放入 PDF 文件")
         return None
@@ -184,15 +185,12 @@ def load_knowledge_base(pdf_dir="pdf_data"):
     )
     chunks = text_splitter.split_documents(docs)
     
-    # 向量化（使用免费的 HuggingFace 模型）
+    # 向量化
     embedding = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
-    vectordb = Chroma.from_documents(
-        documents=chunks,
-        embedding=embedding,
-        persist_directory="./chroma_db"
-    )
+    # 创建 FAISS 数据库（不持久化到磁盘，节省空间；如需持久化可指定 persist_directory）
+    vectordb = FAISS.from_documents(chunks, embedding)
     return vectordb
 
 # ---------- 2. 构建 RAG 问答链 ----------
