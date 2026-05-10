@@ -1,4 +1,12 @@
 import streamlit as st
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains import create_retrieval_chain, create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_deepseek import ChatDeepSeek
+import os
 import pandas as pd
 import numpy as np
 from datetime import datetime, date
@@ -143,6 +151,144 @@ def save_to_google_sheets(patient_dict):
         st.success("✅ 数据已同步至 Google Sheets")
     except Exception as e:
         st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
+
+# ============================================
+# 新增：DeepSeek + 本地知识库问答模块
+# ============================================
+import os
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_deepseek import ChatDeepSeek
+
+# ---------- 1. 加载本地知识库（缓存） ----------
+@st.cache_resource
+def load_knowledge_base(pdf_dir="pdf_data"):
+    """加载所有 PDF 文件并创建向量数据库"""
+    if not os.path.exists(pdf_dir):
+        st.error(f"知识库目录 {pdf_dir} 不存在，请创建并放入 PDF 文件")
+        return None
+    loader = PyPDFDirectoryLoader(pdf_dir)
+    docs = loader.load()
+    if not docs:
+        st.warning("未检测到任何 PDF 文档，知识库为空")
+        return None
+    
+    # 文本分块
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500, chunk_overlap=50
+    )
+    chunks = text_splitter.split_documents(docs)
+    
+    # 向量化（使用免费的 HuggingFace 模型）
+    embedding = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+    vectordb = Chroma.from_documents(
+        documents=chunks,
+        embedding=embedding,
+        persist_directory="./chroma_db"
+    )
+    return vectordb
+
+# ---------- 2. 构建 RAG 问答链 ----------
+def build_rag_chain(vectordb):
+    """创建检索 + 生成链"""
+    # 检索器
+    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
+    
+    # 提示词模板（将患者数据动态注入）
+    template = """
+你是一位资深的临床营养师，专攻应用菊粉类益生元等营养补充方式进行糖尿病营养管理。请根据以下资料回答问题：
+1. 本地专业文档
+2. 当前患者的具体干预前数据
+
+如果信息不足，你可以结合公认的医学知识给出建议，但必须注明依据来源。
+
+【本地文档内容】
+{context}
+
+【患者干预前数据】
+身高：{height} cm
+体重：{weight} kg
+BMI：{bmi}
+腰围：{waist} cm
+高压：{sbp} mmHg
+低压：{dbp} mmHg
+空腹血糖：{fpg} mmol/L
+餐后2h血糖：{pg2h} mmol/L
+糖化血红蛋白：{hba1c}%
+体感总分：{symptom_total}
+其他慢病：{chronic}
+并发症：{complications}
+
+【用户问题】
+{input}
+
+请分点列出个体化的营养治疗方案和建议，并解释预期效果。
+"""
+    prompt = ChatPromptTemplate.from_template(template)
+    
+    # DeepSeek 聊天模型
+    llm = ChatDeepSeek(
+        model="deepseek-chat",
+        api_key=st.secrets["DEEPSEEK_API_KEY"],
+        temperature=0.3
+    )
+    
+    # 构建链
+    combine_docs_chain = create_stuff_documents_chain(llm, prompt)
+    rag_chain = create_retrieval_chain(retriever, combine_docs_chain)
+    return rag_chain
+
+# ---------- 3. 生成方案建议 ----------
+def generate_plan(patient_data: dict) -> str:
+    """根据患者数据调用 RAG 生成营养方案"""
+    vectordb = load_knowledge_base()
+    if vectordb is None:
+        return "❌ 知识库未加载，请检查 PDF 文件"
+    
+    rag_chain = build_rag_chain(vectordb)
+    
+    # 构造输入（提取必要字段，缺失则填“未知”）
+    input_data = {
+        "height": patient_data.get("干预前身高", "未知"),
+        "weight": patient_data.get("干预前体重", "未知"),
+        "bmi": patient_data.get("干预前BMI", "未知"),
+        "waist": patient_data.get("干预前腰围", "未知"),
+        "sbp": patient_data.get("干预前高压", "未知"),
+        "dbp": patient_data.get("干预前低压", "未知"),
+        "fpg": patient_data.get("干预前FPG", "未知"),
+        "pg2h": patient_data.get("干预前PG120", "未知"),
+        "hba1c": patient_data.get("干预前糖化", "未知"),
+        "symptom_total": patient_data.get("干预前体感总分", "未知"),
+        "chronic": patient_data.get("其他慢病", "无"),
+        "complications": patient_data.get("并发症", "无"),
+    }
+    
+    # 调用链
+    result = rag_chain.invoke({
+        "input": "请为这位糖尿病患者制定个体化的营养治疗方案，并预测可能的效果",
+        "height": input_data["height"],
+        "weight": input_data["weight"],
+        # ... 依次传入所有关键字段（必须与模板中变量名一致）
+        "bmi": input_data["bmi"],
+        "waist": input_data["waist"],
+        "sbp": input_data["sbp"],
+        "dbp": input_data["dbp"],
+        "fpg": input_data["fpg"],
+        "pg2h": input_data["pg2h"],
+        "hba1c": input_data["hba1c"],
+        "symptom_total": input_data["symptom_total"],
+        "chronic": input_data["chronic"],
+        "complications": input_data["complications"],
+    })
+    return result["answer"]
+
 
 # ============================================
 # 信息录入主界面
@@ -685,6 +831,25 @@ def patient_info_entry():
 
             st.session_state.patients.append(patient_data)
             st.success(f"✅ 患者 {name} 的信息已成功录入！")
+
+                # ===== 新增：AI 方案建议模块 =====
+            st.markdown("---")
+            st.subheader("🤖 AI 智能方案建议")
+    # 将当前患者数据暂存到 session_state，供按钮触发使用
+            st.session_state.last_patient = patient_data
+    
+            if st.button("生成个体化营养治疗方案", key="gen_plan_btn"):
+                with st.spinner("正在分析患者数据并检索知识库..."):
+                    try:
+                        plan = generate_plan(st.session_state.last_patient)
+                        st.session_state.ai_plan = plan
+                    except Exception as e:
+                        st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
+    
+    # 显示生成结果（如果已有）
+            if st.session_state.get("ai_plan"):
+                st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
+        
 
             # 同步至 Google Sheets
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:

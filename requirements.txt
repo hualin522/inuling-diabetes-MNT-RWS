@@ -4,3 +4,9 @@ numpy
 plotly
 gspread
 google-auth
+langchain
+langchain-community
+langchain-chroma
+langchain-huggingface
+pypdf
+sentence-transformers
