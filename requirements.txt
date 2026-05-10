@@ -4,10 +4,19 @@ numpy
 plotly
 gspread
 google-auth
+
+# LangChain 相关（核心 + 独立包）
 langchain
+langchain-text-splitters
 langchain-community
 langchain-chroma
 langchain-huggingface
+
+# PDF 处理
 pypdf
+
+# 向量嵌入模型
 sentence-transformers
+
+# 消除 transformers 的 torchvision 警告（可选）
 torchvision
