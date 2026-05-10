@@ -1,19 +1,21 @@
 import streamlit as st
-from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS        # 改用 FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_deepseek import ChatDeepSeek
-import os
 import pandas as pd
 import numpy as np
 from datetime import datetime, date
 import plotly.graph_objects as go
 import gspread
 from google.oauth2 import service_account
+import os
+
+# ===== LangChain 相关 =====
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains import create_retrieval_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_deepseek import ChatDeepSeek
 
 # ============================================
 # 自动计算函数
@@ -156,15 +158,6 @@ def save_to_google_sheets(patient_dict):
 # ============================================
 # 新增：DeepSeek + 本地知识库问答模块
 # ============================================
-import os
-from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_deepseek import ChatDeepSeek
 
 # ---------- 1. 加载本地知识库（缓存） ----------
 @st.cache_resource
