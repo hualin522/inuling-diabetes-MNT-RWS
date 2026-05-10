@@ -4,10 +4,11 @@ numpy
 plotly
 gspread
 google-auth
-langchain
-langchain-text-splitters
-langchain-community
-langchain-huggingface
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-text-splitters>=0.2.0
+langchain-huggingface>=0.2.0
+langchain-core>=0.2.0
 pypdf
 sentence-transformers
 faiss-cpu          # 替代 chromadb
