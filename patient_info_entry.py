@@ -1130,14 +1130,45 @@ def patient_info_entry():
                 "使用反馈备注": feedback_notes,
             }
 
+            # 判断本次填写的干预后数据是否全部为空（即用户没有输任何干预后内容）
+            def is_empty_followup(fu):
+                """检查随访字典中干预后关键字段是否全部为 None/空"""
+                # 选几个关键干预后指标（5点血糖、体重等）作为判定依据
+                key_post_fields = [
+                    "干预后体重", "干预后FPG", "干预后PG120", "干预后糖化",
+                    "干预后高压", "干预后低压"
+                ]
+                for k in key_post_fields:
+                    val = fu.get(k)
+                    if val is not None and val != "" and val != 0.0:
+                        return False
+                # 再检查体感总分
+                if fu.get("干预后体感总分") is not None:
+                    return False
+                # 检查药物调整是否发生变化
+                if fu.get("减药/停药情况", "无变化") != "无变化":
+                    return False
+                # 如果有详细文本描述（方案、反馈等），也视为非空
+                if fu.get("干预方案细节", "").strip() or fu.get("使用反馈备注", "").strip():
+                    return False
+                return True
+
+            empty_followup = is_empty_followup(new_followup)
+
             if selected_patient_name != "+ 新增患者" and selected_patient_data:
                 selected_patient_data["提交者ID"] = submitter_id if not is_admin else "admin"
                 if "随访记录" not in selected_patient_data:
                     selected_patient_data["随访记录"] = []
-                selected_patient_data["随访记录"].append(new_followup)
+                # 仅当干预后数据非空时才追加
+                if not empty_followup:
+                    selected_patient_data["随访记录"].append(new_followup)
+                    st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
+                else:
+                    st.info("📝 未填写任何干预后数据，仅更新基线信息（如有修改）。")
                 st.session_state.last_patient = selected_patient_data
-                st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
             else:
+                # 新患者
+                base_followups = [] if empty_followup else [new_followup]
                 base_data = {
                     "提交者ID": submitter_id if not is_admin else "admin",
                     "录入时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1199,11 +1230,14 @@ def patient_info_entry():
                     "提交人": submitter,
                     "指导健管师": supervisor,
                     "备注": remarks,
-                    "随访记录": [new_followup]
+                    "随访记录": base_followups
                 }
                 st.session_state.patients.append(base_data)
                 st.session_state.last_patient = base_data
-                st.success(f"✅ 患者 {name} 已新增并录入首次随访数据")
+                if not empty_followup:
+                    st.success(f"✅ 患者 {name} 已新增并录入首次随访数据")
+                else:
+                    st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
 
             # 准备保存的数据
             save_data = st.session_state.last_patient.copy()
