@@ -1283,6 +1283,91 @@ def patient_info_entry():
                         auc_data.append({"记录": f"随访{i+1}", "AUC": compute_auc(post_vals)})
                     st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
 
+        # ===== 单项体感评分对比（分组柱状图） =====
+        st.subheader("📊 单项体感评分对比")
+        if len(display_patients) > 0:
+            # 沿用前面已选的 patient (selected_patient_name 已取)
+            pre_symptom = patient.get("干预前体感子项", {})
+            if not pre_symptom:
+                st.info("无干预前体感数据")
+            else:
+                items = list(pre_symptom.keys())
+                # 干预前数值
+                pre_vals = [pre_symptom.get(item) for item in items]
+
+                # 构建分组柱状图数据
+                fig = go.Figure()
+                fig.add_trace(go.Bar(name="干预前", x=items, y=pre_vals, marker_color="blue"))
+
+                # 遍历各次随访
+                colors_bar = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive']
+                valid_followups = [f for f in patient.get("随访记录", []) if f.get("干预后体感子项")]
+                for idx, rec in enumerate(valid_followups):
+                    post_symptom = rec.get("干预后体感子项", {})
+                    post_vals = [post_symptom.get(item) for item in items]
+                    color = colors_bar[idx % len(colors_bar)]
+                    followup_label = f"随访{idx+1} ({rec.get('随访时间', '')})"
+                    fig.add_trace(go.Bar(name=followup_label, x=items, y=post_vals, marker_color=color))
+
+                fig.update_layout(
+                    title=f"{selected_patient_name} - 体感评分对比",
+                    xaxis_title="体感项目",
+                    yaxis_title="评分 (0最差, 10最好)",
+                    barmode='group',
+                    yaxis=dict(range=[0, 10])
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+        # ===== 单项生化指标趋势（独立折线图） =====
+        st.subheader("🧪 单项生化指标变化趋势")
+
+        # 定义需要跟踪的生化字段
+        bio_fields = [
+            ("糖化血红蛋白", "干预前糖化", "干预后糖化", "%"),
+            ("总胆固醇 (TC)", "干预前TC", "干预后TC", "mmol/L"),
+            ("甘油三酯 (TG)", "干预前TG", "干预后TG", "mmol/L"),
+            ("低密度脂蛋白 (LDL-C)", "干预前LDL", "干预后LDL", "mmol/L"),
+            ("高密度脂蛋白 (HDL-C)", "干预前HDL", "干预后HDL", "mmol/L"),
+            ("谷丙转氨酶 (ALT)", "干预前ALT", "干预后ALT", "U/L"),
+            ("谷草转氨酶 (AST)", "干预前AST", "干预后AST", "U/L"),
+        ]
+
+        # 准备时间点：基线(干预前) + 各次随访时间
+        followups_list = patient.get("随访记录", [])
+        timepoints = ["干预前"] + [f"随访{i+1}\n({r.get('随访时间', '')[:10]})" for i, r in enumerate(followups_list)]
+
+        # 生成每个指标的折线图
+        for field_name, pre_key, post_key, unit in bio_fields:
+            pre_val = patient.get(pre_key)
+            # 收集各次随访的值
+            post_vals = []
+            for rec in followups_list:
+                val = rec.get(post_key)
+                post_vals.append(val)
+            all_vals = [pre_val] + post_vals
+
+            # 忽略全为 None 的指标
+            if all(v is None for v in all_vals):
+                continue
+
+            # 创建 x 轴数值方便连线（0,1,2,...）
+            x_indices = list(range(len(timepoints)))
+            y_vals = all_vals
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=x_indices, y=y_vals,
+                mode='lines+markers',
+                name=field_name,
+                line=dict(color='royalblue')
+            ))
+            fig.update_layout(
+                title=f"{selected_patient_name} - {field_name}",
+                xaxis=dict(tickmode='array', tickvals=x_indices, ticktext=timepoints),
+                yaxis_title=unit,
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True)                
 
 if __name__ == "__main__":
     patient_info_entry()
