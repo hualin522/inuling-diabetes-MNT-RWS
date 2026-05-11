@@ -125,6 +125,56 @@ def plot_glucose_curve(glucose_values, title):
     )
     return fig, round(auc, 2)
 
+def plot_combined_glucose_curve(pre_glucose_values, post_glucose_values, title):
+    """
+    同时绘制干预前（蓝）和干预后（红）两条血糖曲线
+    返回：图表对象, 干预前AUC, 干预后AUC
+    若任一数据不全则返回 (None, None, None)
+    """
+    if not pre_glucose_values or not post_glucose_values:
+        return None, None, None
+    times = [0, 0.5, 1, 2, 3]
+
+    # 计算 AUC
+    def compute_auc(vals):
+        if not all(vals):
+            return None
+        auc = 0
+        for i in range(len(times)-1):
+            auc += (vals[i] + vals[i+1]) / 2 * (times[i+1] - times[i])
+        return round(auc, 2)
+
+    pre_auc = compute_auc(pre_glucose_values)
+    post_auc = compute_auc(post_glucose_values)
+    if pre_auc is None or post_auc is None:
+        return None, None, None
+
+    # 绘图
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=times, y=pre_glucose_values,
+        mode='lines+markers',
+        name='干预前',
+        line=dict(color='blue')
+    ))
+    fig.add_trace(go.Scatter(
+        x=times, y=post_glucose_values,
+        mode='lines+markers',
+        name='干预后',
+        line=dict(color='red')
+    ))
+
+    all_vals = [v for v in pre_glucose_values + post_glucose_values if v is not None]
+    max_y = max(all_vals) if all_vals else 10
+    fig.update_layout(
+        title=title,
+        xaxis_title='时间 (小时)',
+        yaxis_title='血糖 (mmol/L)',
+        xaxis=dict(tickmode='array', tickvals=times, ticktext=['空腹','0.5h','1h','2h','3h']),
+        yaxis=dict(range=[0, max_y * 1.05])
+    )
+    return fig, pre_auc, post_auc
+
 # ============================================
 # 异常值提醒辅助函数
 # ============================================
@@ -216,99 +266,194 @@ def load_knowledge_base(pdf_dir="pdf_data"):
     return vectordb
 
 # ---------- 2. 构建 RAG 问答链 ----------
-def build_rag_chain(vectordb):
-    """创建检索 + 生成链"""
+def build_rag_chain(vectordb, mode="pre"):
+    """
+    mode: "pre"  只填了干预前数据 → 病情分析 + 方案建议
+          "post" 同时有干预前后 → 改善对比 + 下阶段建议（含使用反馈）
+    """
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
-    
-    template = """
-你是一位资深的临床营养师，专攻应用菊粉类益生元等营养补充方式进行糖尿病营养管理。请根据以下资料回答问题：
-1. 本地专业文档
-2. 当前患者的具体干预前数据
 
-如果信息不足，你可以结合公认的医学知识给出建议，但必须注明依据来源。
+    if mode == "pre":
+        template = """
+你是一位资深的临床营养师和健康管理师，专攻基于“肠道菌群紊乱/肠屏障受损-慢性炎症-表观遗传”机制运用营养治疗进行糖尿病营养管理，擅长使用英纽林的系列产品。请根据以下资料，为当前患者制定个体化的干预方案，并分五部分清晰作答：
 
-【本地文档内容】
+【本地专业文档】
 {context}
 
 【患者干预前数据】
 身高：{height} cm
-体重：{weight} kg
-BMI：{bmi}
-腰围：{waist} cm
-高压：{sbp} mmHg
-低压：{dbp} mmHg
-空腹血糖：{fpg} mmol/L
-餐后2h血糖：{pg2h} mmol/L
-糖化血红蛋白：{hba1c}%
-体感总分：{symptom_total}
+体重：{pre_weight} kg
+BMI：{pre_bmi}
+腰围：{pre_waist} cm
+高压：{pre_sbp} mmHg
+低压：{pre_dbp} mmHg
+空腹血糖：{pre_fpg} mmol/L
+餐后2h血糖：{pre_pg2h} mmol/L
+糖化血红蛋白：{pre_hba1c}%
+体感总分：{pre_symptom_total}
 其他慢病：{chronic}
 并发症：{complications}
 
 【用户问题】
 {input}
 
-请分点列出个体化的营养治疗方案和建议，并解释预期效果。
+请严格按照以下五部分输出，使用 markdown 格式，并注明信息来源：
+
+### 1. 患者糖尿病病情分析
+（根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，语气专业温和。）
+
+### 2. 英纽林营养产品应用方案
+（结合本地文档中英纽林系列产品（畅快/纽畅/纽畅B等）的用法，推荐适合该患者的产品、剂量、服用时间、周期，并解释选择依据。）
+
+### 3. 日常饮食和运动管理建议
+（给出具体、可操作的饮食原则与食谱建议，以及适合患者的运动类型、频率、强度，并与营养方案配合。）
+
+### 4. 干预效果预期分析
+（科学预估在规范使用产品并配合生活调整后，3~6个月内各项指标可能的改善幅度，如血糖、体重、糖化等。）
+
+### 5. 总结
+（用一段鼓励的话语总结整体方案，强调坚持的重要性，表达积极预期。）
 """
+    else:
+        template = """
+你是一位富有亲和力的临床营养师和健康管理师，擅长用积极、鼓励的方式解读英纽林系列营养产品对糖尿病营养治疗的效果。请根据以下资料，为这位患者进行干预前后对比分析，并给出下阶段建议。
+
+【本地专业文档】
+{context}
+
+【患者干预前数据】
+身高：{height} cm
+体重：{pre_weight} kg
+BMI：{pre_bmi}
+腰围：{pre_waist} cm
+高压：{pre_sbp} mmHg
+低压：{pre_dbp} mmHg
+空腹血糖：{pre_fpg} mmol/L
+餐后2h血糖：{pre_pg2h} mmol/L
+糖化血红蛋白：{pre_hba1c}%
+体感总分：{pre_symptom_total}
+其他慢病：{chronic}
+并发症：{complications}
+
+【患者干预后数据】
+体重：{post_weight} kg
+BMI：{post_bmi}
+腰围：{post_waist} cm
+高压：{post_sbp} mmHg
+低压：{post_dbp} mmHg
+空腹血糖：{post_fpg} mmol/L
+餐后2h血糖：{post_pg2h} mmol/L
+糖化血红蛋白：{post_hba1c}%
+体感总分：{post_symptom_total}
+
+【使用反馈】
+不良反应：{feedback_symptoms}
+详细描述：{feedback_notes}
+
+【用户问题】
+{input}
+
+请以热情、鼓励的口吻输出以下两部分（使用 markdown 格式，适当使用表情符号，语气积极乐观，同时注明信息来源）：
+
+### 1. 糖尿病改善情况分析
+（对比干预前后的关键指标，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果使用了英纽林产品并出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
+
+### 2. 下一阶段营养干预建议
+（结合本地文档和当前改善程度，以及使用反馈中提到的状况，推荐下一阶段的产品使用调整（例如是否需要更换种类、调整剂量、配合其他辅助措施等）。同时给出饮食、运动方面的优化建议，帮助患者朝着更好的方向前进。）
+"""
+
     prompt = ChatPromptTemplate.from_template(template)
-    
-    # API Key 保护
+
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
     if not api_key:
         st.error("❌ 请在 Streamlit Secrets 中设置 DEEPSEEK_API_KEY")
         st.stop()
-    
+
     llm = ChatDeepSeek(
         model="deepseek-chat",
         api_key=api_key,
         temperature=0.3
     )
-    
+
     combine_docs_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, combine_docs_chain)
     return rag_chain
 
-# ---------- 3. 生成方案建议 ----------
+
 def generate_plan(patient_data: dict) -> str:
-    """根据患者数据调用 RAG 生成营养方案"""
+    """根据患者数据自动选择分析模式并调用 RAG 生成方案"""
     vectordb = load_knowledge_base()
     if vectordb is None:
         return "❌ 知识库未加载，请检查 PDF 文件"
-    
-    rag_chain = build_rag_chain(vectordb)
-    
-    # 构造输入（缺失则填“未知”）
-    input_data = {
+
+    # 判断是否有干预后数据（以至少一个关键指标非空为准）
+    has_post = any([
+        patient_data.get("干预后FPG"),
+        patient_data.get("干预后PG120"),
+        patient_data.get("干预后糖化"),
+        patient_data.get("干预后体重")
+    ])
+
+    if has_post:
+        mode = "post"
+        input_text = "请为这位糖尿病患者进行干预前后对比分析，并给出下一阶段的营养建议。"
+    else:
+        mode = "pre"
+        input_text = "请为这位糖尿病患者制定个体化的营养治疗方案，并预测可能的效果"
+
+    rag_chain = build_rag_chain(vectordb, mode)
+
+    # 准备通用字段（缺失则用“未知”或“无”）
+    base_data = {
         "height": patient_data.get("干预前身高", "未知"),
-        "weight": patient_data.get("干预前体重", "未知"),
-        "bmi": patient_data.get("干预前BMI", "未知"),
-        "waist": patient_data.get("干预前腰围", "未知"),
-        "sbp": patient_data.get("干预前高压", "未知"),
-        "dbp": patient_data.get("干预前低压", "未知"),
-        "fpg": patient_data.get("干预前FPG", "未知"),
-        "pg2h": patient_data.get("干预前PG120", "未知"),
-        "hba1c": patient_data.get("干预前糖化", "未知"),
-        "symptom_total": patient_data.get("干预前体感总分", "未知"),
         "chronic": patient_data.get("其他慢病", "无"),
         "complications": patient_data.get("并发症", "无"),
     }
-    
-    result = rag_chain.invoke({
-        "input": "请为这位糖尿病患者制定个体化的营养治疗方案，并预测可能的效果",
-        "height": input_data["height"],
-        "weight": input_data["weight"],
-        "bmi": input_data["bmi"],
-        "waist": input_data["waist"],
-        "sbp": input_data["sbp"],
-        "dbp": input_data["dbp"],
-        "fpg": input_data["fpg"],
-        "pg2h": input_data["pg2h"],
-        "hba1c": input_data["hba1c"],
-        "symptom_total": input_data["symptom_total"],
-        "chronic": input_data["chronic"],
-        "complications": input_data["complications"],
-    })
-    return result["answer"]
 
+    # 干预前必须的指标
+    pre_data = {
+        "pre_weight": patient_data.get("干预前体重", "未知"),
+        "pre_bmi": patient_data.get("干预前BMI", "未知"),
+        "pre_waist": patient_data.get("干预前腰围", "未知"),
+        "pre_sbp": patient_data.get("干预前高压", "未知"),
+        "pre_dbp": patient_data.get("干预前低压", "未知"),
+        "pre_fpg": patient_data.get("干预前FPG", "未知"),
+        "pre_pg2h": patient_data.get("干预前PG120", "未知"),
+        "pre_hba1c": patient_data.get("干预前糖化", "未知"),
+        "pre_symptom_total": patient_data.get("干预前体感总分", "未知"),
+    }
+
+    # 如果是干预后模式，添加干预后指标
+    post_data = {}
+    if mode == "post":
+        post_data = {
+            "post_weight": patient_data.get("干预后体重", "未知"),
+            "post_bmi": patient_data.get("干预后BMI", "未知"),
+            "post_waist": patient_data.get("干预后腰围", "未知"),
+            "post_sbp": patient_data.get("干预后高压", "未知"),
+            "post_dbp": patient_data.get("干预后低压", "未知"),
+            "post_fpg": patient_data.get("干预后FPG", "未知"),
+            "post_pg2h": patient_data.get("干预后PG120", "未知"),
+            "post_hba1c": patient_data.get("干预后糖化", "未知"),
+            "post_symptom_total": patient_data.get("干预后体感总分", "未知"),
+        }
+
+    # 获取使用反馈并格式化
+    fb_symptoms = patient_data.get("使用反馈症状", [])
+    fb_symptoms_str = ", ".join(fb_symptoms) if fb_symptoms else "无"
+    fb_notes = patient_data.get("使用反馈备注", "") or "无"
+
+    invoke_input = {
+        "input": input_text,
+        **base_data,
+        **pre_data,
+        **post_data,
+        "feedback_symptoms": fb_symptoms_str,
+        "feedback_notes": fb_notes,
+    }
+
+    result = rag_chain.invoke(invoke_input)
+    return result["answer"]
 
 # ============================================
 # 信息录入主界面
@@ -657,11 +802,29 @@ def patient_info_entry():
 
         # ===== 13. 干预方案 =====
         with st.expander("1️⃣3️⃣ 干预方案", expanded=False):
-            intervention_type = st.selectbox("营养治疗方案", ["畅快", "纽畅", "纽畅B", "其他营养治疗"], key="intervention_type")
+            intervention_type = st.selectbox(
+                "营养治疗方案",
+                ["请选择", "畅快", "纽畅", "纽畅B", "其他营养治疗"],
+                key="intervention_type",
+                help="请务必选择实际使用的方案，避免误提交默认值"
+            )
             intervention_detail = st.text_area(
                 "方案细节（用量/用法/周期等）",
                 placeholder="例如：纽畅B 每日2次，每次1包，餐后服用",
                 key="intervention_detail"
+            )
+            st.markdown("---")
+            st.subheader("使用反馈（如发生不良反应，请勾选并填写备注）")
+            feedback_symptoms = st.multiselect(
+                "常见不良反应",
+                ["腹泻", "便秘", "腹胀", "恶心", "腹痛", "过敏/皮疹", "其他"],
+                key="feedback_symptoms",
+                help="可多选；若未出现明显不适，请留空"
+            )
+            feedback_notes = st.text_area(
+                "反馈详细描述",
+                placeholder="例如：服用第1周每天轻度腹泻2次，后自行缓解；或：暂无明显不适……",
+                key="feedback_notes"
             )
 
         # ===== 14. 干预前日常7点血糖 =====
@@ -826,8 +989,10 @@ def patient_info_entry():
                 "干预后PG60": post_pg60,
                 "干预后PG120": post_pg120,
                 "干预后PG180": post_pg180,
-                "干预方案": intervention_type,
+                "干预方案": "" if intervention_type == "请选择" else intervention_type,
                 "干预方案细节": intervention_detail,
+                "使用反馈症状": feedback_symptoms,      # 列表，如 ["腹泻", "腹胀"]
+                "使用反馈备注": feedback_notes,          # 文本字符串
                 "干预时长(天)": duration_days,
                 "干预前7点日期": pre_7_date,
                 "干预前早餐前": pre_bf_before,
@@ -912,28 +1077,47 @@ def patient_info_entry():
             patient.get("干预前PG60"), patient.get("干预前PG120"),
             patient.get("干预前PG180")
         ]
-        pre_fig, pre_auc = plot_glucose_curve(pre_values, f"{selected_patient_name} - 干预前")
-
         post_values = [
             patient.get("干预后FPG"), patient.get("干预后PG30"),
             patient.get("干预后PG60"), patient.get("干预后PG120"),
             patient.get("干预后PG180")
         ]
-        post_fig, post_auc = plot_glucose_curve(post_values, f"{selected_patient_name} - 干预后")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if pre_fig:
-                st.plotly_chart(pre_fig, use_container_width=True)
-                st.metric("干预前 AUC (mmol/L·h)", pre_auc)
+        pre_complete = all(pre_values)   # 五项均非 None
+        post_complete = all(post_values)
+
+        if pre_complete and post_complete:
+            # 干预前后数据均完整 → 组合图
+            fig, pre_auc, post_auc = plot_combined_glucose_curve(
+                pre_values, post_values,
+                f"{selected_patient_name} - 干预前后对比"
+            )
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("干预前 AUC (mmol/L·h)", pre_auc)
+                with col2:
+                    st.metric("干预后 AUC (mmol/L·h)", post_auc)
             else:
-                st.info("无干预前5点血糖数据")
-        with col2:
-            if post_fig:
-                st.plotly_chart(post_fig, use_container_width=True)
-                st.metric("干预后 AUC (mmol/L·h)", post_auc)
-            else:
-                st.info("无干预后5点血糖数据")
+                st.info("血糖数据不完整，无法生成对比曲线")
+        else:
+            # 只有单侧数据 → 原有的单独展示
+            pre_fig, pre_auc = plot_glucose_curve(pre_values, f"{selected_patient_name} - 干预前")
+            post_fig, post_auc = plot_glucose_curve(post_values, f"{selected_patient_name} - 干预后")
+            col1, col2 = st.columns(2)
+            with col1:
+                if pre_fig:
+                    st.plotly_chart(pre_fig, use_container_width=True)
+                    st.metric("干预前 AUC (mmol/L·h)", pre_auc)
+                else:
+                    st.info("无干预前5点血糖数据")
+            with col2:
+                if post_fig:
+                    st.plotly_chart(post_fig, use_container_width=True)
+                    st.metric("干预后 AUC (mmol/L·h)", post_auc)
+                else:
+                    st.info("无干预后5点血糖数据")
     else:
         st.info("请先录入患者数据，然后即可查看血糖曲线和AUC。")
 
