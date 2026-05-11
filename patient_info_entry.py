@@ -219,26 +219,10 @@ def save_to_google_sheets(patient_dict):
         sheet = client.open_by_key(st.secrets["google_sheets"]["spreadsheet_id"]).sheet1
         flat = flatten_dict(patient_dict)
         header_row = sheet.row_values(1)
-
-        # 如果没有标题行或标题为空，直接追加
         if not header_row or all(cell == '' for cell in header_row):
             header_to_write = list(flat.keys())
             sheet.append_row(header_to_write)
-            row_data = [flat.get(col, "") for col in header_to_write]
-            sheet.append_row(row_data)
-            st.success("✅ 数据已同步至 Google Sheets")
-            return
-
-        # 智能补充：如果 flat 中有新的键，将其添加到标题行
-        new_headers = [key for key in flat.keys() if key not in header_row]
-        if new_headers:
-            # 找到最后一个有效列的位置，然后追加新列
-            last_col = len(header_row) + 1
-            for i, key in enumerate(new_headers):
-                sheet.update_cell(1, last_col + i, key)
-            # 重新获取完整的 header_row
-            header_row = sheet.row_values(1)
-
+            header_row = header_to_write
         row_data = [flat.get(col, "") for col in header_row]
         sheet.append_row(row_data)
         st.success("✅ 数据已同步至 Google Sheets")
