@@ -923,6 +923,12 @@ def patient_info_entry():
             # 计算干预时长
             duration_days = calculate_duration(pre_glyc_date, post_glyc_date)
 
+            # 处理产品列表（将“其他营养治疗”替换为具体名称）
+            final_products = intervention_products.copy()
+            if "其他营养治疗" in final_products and other_product_name.strip():
+                idx = final_products.index("其他营养治疗")
+                final_products[idx] = other_product_name.strip()
+
             # 组装完整患者数据字典
             patient_data = {
                 "录入时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1003,13 +1009,8 @@ def patient_info_entry():
                 "干预后PG60": post_pg60,
                 "干预后PG120": post_pg120,
                 "干预后PG180": post_pg180,
-                # 构建最终产品列表字符串（用于后续分析）
-                final_products = intervention_products.copy()
-                if "其他营养治疗" in intervention_products and other_product_name.strip():
-                    final_products[final_products.index("其他营养治疗")] = other_product_name.strip()
-                # 存储时可以用列表，或直接转为字符串展示
-                "干预方案产品": final_products,                     # 列表，如 ["畅快", "纽畅B"]
-                "干预方案产品文本": "，".join(final_products),      # 用于AI提示词
+                "干预方案产品": final_products,
+                "干预方案产品文本": "，".join(final_products),
                 "干预方案细节": intervention_detail,                "使用反馈症状": feedback_symptoms,      # 列表，如 ["腹泻", "腹胀"]
                 "使用反馈备注": feedback_notes,          # 文本字符串
                 "干预时长(天)": duration_days,
