@@ -447,6 +447,10 @@ def generate_plan(patient_data: dict) -> str:
     fb_symptoms_str = ", ".join(fb_symptoms) if fb_symptoms else "无"
     fb_notes = patient_data.get("使用反馈备注", "") or "无"
 
+    # 获取产品选择与方案细节
+    selected_products = patient_data.get("干预方案产品文本", "未指定")
+    intervention_detail = patient_data.get("干预方案细节", "未填写")
+
     invoke_input = {
         "input": input_text,
         **base_data,
@@ -454,6 +458,8 @@ def generate_plan(patient_data: dict) -> str:
         **post_data,
         "feedback_symptoms": fb_symptoms_str,
         "feedback_notes": fb_notes,
+        "selected_products": selected_products,
+        "intervention_detail": intervention_detail,
     }
 
     result = rag_chain.invoke(invoke_input)
