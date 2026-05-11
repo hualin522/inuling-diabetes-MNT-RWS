@@ -293,6 +293,8 @@ BMI：{pre_bmi}
 体感总分：{pre_symptom_total}
 其他慢病：{chronic}
 并发症：{complications}
+已选用英纽林产品：{selected_products}
+联合使用方案细节：{intervention_detail}
 
 【用户问题】
 {input}
@@ -303,7 +305,7 @@ BMI：{pre_bmi}
 （根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，语气专业温和。）
 
 ### 2. 英纽林营养产品应用方案
-（结合本地文档中英纽林系列产品（畅快/纽畅/纽畅B等）的用法，推荐适合该患者的产品、剂量、服用时间、周期，并解释选择依据。）
+（结合本地文档中英纽林系列产品（畅快/纽畅/纽畅B等）的用法，推荐适合该患者的产品、剂量、服用时间、周期。如果患者已选择了某种产品组合，请基于该组合给出具体的服用方案）
 
 ### 3. 日常饮食和运动管理建议
 （给出具体、可操作的饮食原则与食谱建议，以及适合患者的运动类型、频率、强度，并与营养方案配合。）
@@ -345,6 +347,8 @@ BMI：{post_bmi}
 餐后2h血糖：{post_pg2h} mmol/L
 糖化血红蛋白：{post_hba1c}%
 体感总分：{post_symptom_total}
+已选用英纽林产品：{selected_products}
+联合使用方案细节：{intervention_detail}
 
 【使用反馈】
 不良反应：{feedback_symptoms}
@@ -356,7 +360,7 @@ BMI：{post_bmi}
 请以热情、鼓励的口吻输出以下两部分（使用 markdown 格式，适当使用表情符号，语气积极乐观，同时注明信息来源）：
 
 ### 1. 糖尿病改善情况分析
-（对比干预前后的关键指标，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果使用了英纽林产品并出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
+（对比干预前后的关键指标，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果患者已选择了某种产品组合，请基于该组合请根据病情推荐合适的具体应用方案，如果出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
 
 ### 2. 下一阶段营养干预建议
 （结合本地文档和当前改善程度，以及使用反馈中提到的状况，推荐下一阶段的产品使用调整（例如是否需要更换种类、调整剂量、配合其他辅助措施等）。同时给出饮食、运动方面的优化建议，帮助患者朝着更好的方向前进。）
@@ -802,17 +806,27 @@ def patient_info_entry():
 
         # ===== 13. 干预方案 =====
         with st.expander("1️⃣3️⃣ 干预方案", expanded=False):
-            intervention_type = st.selectbox(
-                "营养治疗方案",
-                ["请选择", "畅快", "纽畅", "纽畅B", "其他营养治疗"],
-                key="intervention_type",
-                help="请务必选择实际使用的方案，避免误提交默认值"
+            intervention_products = st.multiselect(
+                "营养治疗产品（可多选）",
+                ["畅快", "纽畅", "纽畅B", "其他营养治疗"],
+                key="intervention_products",
+                help="请选择患者使用的全部产品，联合使用请一并勾选"
             )
+            # 如果选了“其他营养治疗”，允许补充名称
+            other_product_name = ""
+            if "其他营养治疗" in intervention_products:
+                other_product_name = st.text_input(
+                    "请输入‘其他营养治疗’的具体名称",
+                    key="other_product_name"
+                )
+
             intervention_detail = st.text_area(
-                "方案细节（用量/用法/周期等）",
-                placeholder="例如：纽畅B 每日2次，每次1包，餐后服用",
-                key="intervention_detail"
+                "干预方案细节（用量/用法/周期/搭配方式等）",
+                placeholder="例如：\n畅快 每日1次 每次1包，早晚餐前温水冲服；\n纽畅B 每日2次 每次1包，随餐服用。\n\n若为其他产品，请注明名称及用法。",
+                key="intervention_detail",
+                help="建议描述每种产品的每日次数、单次剂量、服用时间及联合方式。"
             )
+
             st.markdown("---")
             st.subheader("使用反馈（如发生不良反应，请勾选并填写备注）")
             feedback_symptoms = st.multiselect(
@@ -989,9 +1003,14 @@ def patient_info_entry():
                 "干预后PG60": post_pg60,
                 "干预后PG120": post_pg120,
                 "干预后PG180": post_pg180,
-                "干预方案": "" if intervention_type == "请选择" else intervention_type,
-                "干预方案细节": intervention_detail,
-                "使用反馈症状": feedback_symptoms,      # 列表，如 ["腹泻", "腹胀"]
+                # 构建最终产品列表字符串（用于后续分析）
+                final_products = intervention_products.copy()
+                if "其他营养治疗" in intervention_products and other_product_name.strip():
+                    final_products[final_products.index("其他营养治疗")] = other_product_name.strip()
+                # 存储时可以用列表，或直接转为字符串展示
+                "干预方案产品": final_products,                     # 列表，如 ["畅快", "纽畅B"]
+                "干预方案产品文本": "，".join(final_products),      # 用于AI提示词
+                "干预方案细节": intervention_detail,                "使用反馈症状": feedback_symptoms,      # 列表，如 ["腹泻", "腹胀"]
                 "使用反馈备注": feedback_notes,          # 文本字符串
                 "干预时长(天)": duration_days,
                 "干预前7点日期": pre_7_date,
