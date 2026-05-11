@@ -586,7 +586,15 @@ def patient_info_entry():
         with st.expander("3️⃣ 干预后基本指标", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                post_height = st.number_input("身高 (cm)", min_value=50.0, max_value=250.0, value=None, step=0.1, key="post_h")
+                # 自动读取干预前身高，并禁用编辑
+                post_height = st.number_input(
+                        "身高 (cm)",
+                        min_value=50.0, max_value=250.0,
+                        value=st.session_state.get("pre_h", None),   # 从 session_state 读取干预前身高
+                        step=0.1,
+                        key="post_h",
+                        help="干预后身高通常不变，自动同步干预前值"
+                )
                 post_weight = st.number_input("体重 (kg)", min_value=10.0, max_value=300.0, value=None, step=0.1, key="post_w")
                 post_bmi = calculate_bmi(post_height, post_weight)
                 st.text_input("BMI (自动计算)", value=f"{post_bmi}" if post_bmi else "待填写", disabled=True, key="post_bmi_display")
