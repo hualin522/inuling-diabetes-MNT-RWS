@@ -218,13 +218,33 @@ def save_to_google_sheets(patient_dict):
         client = gspread.authorize(credentials)
         sheet = client.open_by_key(st.secrets["google_sheets"]["spreadsheet_id"]).sheet1
         flat = flatten_dict(patient_dict)
+
+        # 确保必要的列存在
+        essential_cols = ["提交者ID", "患者姓名", "随访记录"]
+        for col in essential_cols:
+            if col not in flat:
+                flat[col] = ""
+
         header_row = sheet.row_values(1)
+
         if not header_row or all(cell == '' for cell in header_row):
+            # 第一次写入，使用 flat 的键，但限制列数
             header_to_write = list(flat.keys())
+            if len(header_to_write) > 130:
+                st.warning("字段过多，将截断部分字段")
+                header_to_write = header_to_write[:130]
             sheet.append_row(header_to_write)
-            header_row = header_to_write
-        row_data = [flat.get(col, "") for col in header_row]
-        sheet.append_row(row_data)
+            row_data = [flat.get(col, "") for col in header_to_write]
+            sheet.append_row(row_data)
+        else:
+            # 已有标题行，确保“随访记录”列存在
+            if "随访记录" not in header_row:
+                # 在最后一列之后添加“随访记录”
+                last_col = len(header_row) + 1
+                sheet.update_cell(1, last_col, "随访记录")
+                header_row = sheet.row_values(1)  # 刷新标题行
+            row_data = [flat.get(col, "") for col in header_row]
+            sheet.append_row(row_data)
         st.success("✅ 数据已同步至 Google Sheets")
     except Exception as e:
         st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
@@ -1116,11 +1136,34 @@ def patient_info_entry():
                 st.session_state.last_patient = base_data
                 st.success(f"✅ 患者 {name} 已新增并录入首次随访数据")
 
+            # 准备保存的数据（与之前相同）
             save_data = st.session_state.last_patient.copy()
+            
+            # ⬇️ 在这里插入提取最新随访指标的代码 ⬇️
+            if "随访记录" in save_data and isinstance(save_data["随访记录"], list) and save_data["随访记录"]:
+                latest = save_data["随访记录"][-1]
+                save_data["最新随访FPG"] = latest.get("干预后FPG", "")
+                save_data["最新随访PG30"] = latest.get("干预后PG30", "")
+                save_data["最新随访PG60"] = latest.get("干预后PG60", "")
+                save_data["最新随访PG120"] = latest.get("干预后PG120", "")
+                save_data["最新随访PG180"] = latest.get("干预后PG180", "")
+                # 如需要其他指标，可以继续添加，例如：
+                # save_data["最新随访糖化"] = latest.get("干预后糖化", "")
+            else:
+                save_data["最新随访FPG"] = ""
+                save_data["最新随访PG30"] = ""
+                save_data["最新随访PG60"] = ""
+                save_data["最新随访PG120"] = ""
+                save_data["最新随访PG180"] = ""
+            # ⬆️ 插入结束 ⬆️
+
+            # 然后将随访记录转为 JSON 字符串（注意：提取应在此转换之前进行）
             if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
                 save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
+            
+            # 最后保存到 Google Sheets
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
-                save_to_google_sheets(save_data)
+                save_to_google_sheets(save_data)  # 或者您现有的保存函数
             else:
                 st.info("💡 提示：配置 Google Sheets 后数据将自动云端汇总")
             st.balloons()
