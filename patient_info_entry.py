@@ -205,7 +205,7 @@ def save_to_google_sheets(patient_dict):
         st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
 
 # ============================================
-# 从 Google Sheets 加载数据
+# 从 Google Sheets 加载数据，并转换类型
 # ============================================
 def load_patients_from_sheets(submitter_id=None):
     try:
@@ -221,25 +221,91 @@ def load_patients_from_sheets(submitter_id=None):
         if submitter_id:
             all_data = [row for row in all_data if row.get("提交者ID", "") == submitter_id]
 
+        # 日期字段列表
         date_fields = [
             "出生日期", "确诊日期", "干预前体感日期", "干预后体感日期",
             "干预前生化日期", "干预后生化日期", "干预前5点日期", "干预后5点日期",
             "干预前7点日期", "干预后7点日期", "用药调整干预前日期", "用药调整干预后日期"
         ]
+        # 数值字段列表
+        numeric_fields = [
+            "干预前身高", "干预前体重", "干预前BMI", "干预前腰围", "干预前臀围",
+            "干预前高压", "干预前低压", "干预后身高", "干预后体重", "干预后BMI",
+            "干预后腰围", "干预后臀围", "干预后高压", "干预后低压",
+            "干预前FPG", "干预前PG30", "干预前PG60", "干预前PG120", "干预前PG180",
+            "干预后FPG", "干预后PG30", "干预后PG60", "干预后PG120", "干预后PG180",
+            "干预前糖化", "干预前TC", "干预前TG", "干预前LDL", "干预前HDL",
+            "干预前ALT", "干预前AST", "干预后糖化", "干预后TC", "干预后TG",
+            "干预后LDL", "干预后HDL", "干预后ALT", "干预后AST",
+            "干预前胰岛素次/天", "干预前胰岛素剂量/次", "干预前二甲双胍天/次",
+            "干预前二甲双胍剂量/次", "干预前阿卡波糖天/次", "干预前阿卡波糖剂量/次",
+            "干预后胰岛素次/天", "干预后胰岛素剂量/次", "干预后二甲双胍天/次",
+            "干预后二甲双胍剂量/次", "干预后阿卡波糖天/次", "干预后阿卡波糖剂量/次",
+            "干预前早餐前", "干预前早餐后2h", "干预前午餐前", "干预前午餐后2h",
+            "干预前晚餐前", "干预前晚餐后2h", "干预前睡前",
+            "干预后早餐前", "干预后早餐后2h", "干预后午餐前", "干预后午餐后2h",
+            "干预后晚餐前", "干预后晚餐后2h", "干预后睡前",
+        ]
+
         for row in all_data:
+            # 处理日期
             for df in date_fields:
-                if df in row and isinstance(row[df], str) and row[df].strip():
-                    try:
-                        row[df] = datetime.strptime(row[df], "%Y-%m-%d").date()
-                    except:
+                if df in row:
+                    val = row[df]
+                    if isinstance(val, str) and val.strip():
+                        try:
+                            row[df] = datetime.strptime(val.strip(), "%Y-%m-%d").date()
+                        except:
+                            row[df] = None
+                    elif isinstance(val, str) and not val.strip():
                         row[df] = None
+            # 处理数值
+            for nf in numeric_fields:
+                if nf in row:
+                    val = row[nf]
+                    if isinstance(val, str):
+                        val = val.strip()
+                        if val != "":
+                            try:
+                                row[nf] = float(val)
+                            except ValueError:
+                                row[nf] = None
+                        else:
+                            row[nf] = None
+                    # 如果是数字，保留
+            # 处理随访记录（JSON字符串）
             if "随访记录" in row and isinstance(row["随访记录"], str):
                 try:
                     row["随访记录"] = json.loads(row["随访记录"])
                 except:
                     row["随访记录"] = []
+            # 处理随访记录内的数值和日期字段
+            if "随访记录" in row and isinstance(row["随访记录"], list):
+                for record in row["随访记录"]:
+                    for df in date_fields:
+                        if df in record and isinstance(record[df], str):
+                            val = record[df].strip()
+                            if val:
+                                try:
+                                    record[df] = datetime.strptime(val, "%Y-%m-%d").date()
+                                except:
+                                    record[df] = None
+                            else:
+                                record[df] = None
+                    for nf in numeric_fields:
+                        if nf in record and isinstance(record[nf], str):
+                            val = record[nf].strip()
+                            if val:
+                                try:
+                                    record[nf] = float(val)
+                                except ValueError:
+                                    record[nf] = None
+                            else:
+                                record[nf] = None
+
+            # 确保提交者ID存在
             if "提交者ID" not in row:
-                row["提交者ID"] = submitter_id
+                row["提交者ID"] = submitter_id  # 向后兼容，但可能为空
         return all_data
     except Exception as e:
         st.error(f"从 Google Sheets 加载数据失败：{e}")
@@ -295,19 +361,10 @@ BMI：{pre_bmi}
 请按照以下五部分输出：
 
 ### 1. 患者糖尿病病情分析
-（根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，如果有相应的体感评分则分析患者的主观不适状况，语气专业温和。）
-
 ### 2. 英纽林营养产品应用方案
-（针对该患者的血糖情况和体感状况，结合本地文档中英纽林系列产品（畅快/纽畅/纽畅B等）的用法，推荐适合该患者的产品、剂量、服用时间、周期。如果患者已选择了某种产品组合，请基于该组合给出具体的服用方案）
-
-### 3. 日常饮食、中医干预和运动管理建议
-（给出具体、可操作的饮食原则与食谱建议；针对患者的体感症状，推荐适合的符合国家要求的药食同源类中药；并给出适合患者的运动类型、频率、强度建议。并与营养方案配合。）
-
+### 3. 日常饮食和运动管理建议
 ### 4. 干预效果预期分析
-（科学预估在规范使用产品并配合生活调整后，3~6个月内各项指标可能的改善幅度，如血糖、体重、糖化等。）
-
 ### 5. 总结
-（用一段鼓励的话语总结整体方案，强调坚持的重要性，表达积极预期。）
 """
     else:
         template = """
@@ -353,10 +410,7 @@ BMI：{post_bmi}
 请以热情、鼓励的口吻输出以下两部分：
 
 ### 1. 糖尿病改善情况分析
-（对比干预前后的关键指标及体感变化，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果患者已选择了某种产品组合，请基于该组合推荐合适的具体应用方案，如果出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
-
 ### 2. 下一阶段营养干预建议
-（结合本地文档和当前改善程度，以及使用反馈中提到的状况，推荐下一阶段的产品使用调整（例如是否需要更换种类、调整剂量、配合其他辅助措施等）。同时给出饮食、药食同源中药和运动方面的优化建议，帮助患者朝着更好的方向前进。）
 """
     prompt = ChatPromptTemplate.from_template(template)
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
@@ -444,10 +498,14 @@ def generate_plan(patient_combined_data: dict) -> str:
 def patient_info_entry():
     st.header("📋 英纽林糖尿病营养治疗真实世界研究案例收集")
 
-    # ---------- URL 参数 ----------
     query_params = st.query_params
     submitter_id = query_params.get("submitter_id", None)
-    is_admin = query_params.get("admin", "0") == "1"
+    
+    # 管理员验证：通过 Secrets 中的 ADMIN_TOKEN 对比
+    admin_token = query_params.get("admin_token", None)
+    is_admin = False
+    if admin_token and "ADMIN_TOKEN" in st.secrets:
+        is_admin = (admin_token == st.secrets["ADMIN_TOKEN"])
 
     if is_admin:
         st.info("🔑 管理员模式：可查看所有提交者的数据")
@@ -457,13 +515,11 @@ def patient_info_entry():
         st.error("❌ 请使用正确的链接访问（需要提交者ID或管理员权限）")
         st.stop()
 
-    # ---------- 初始化会话状态 ----------
     if "patients" not in st.session_state:
         st.session_state.patients = []
     if "loaded_from_cloud" not in st.session_state:
         st.session_state.loaded_from_cloud = False
 
-    # ---------- 从 Google Sheets 加载数据 ----------
     if not st.session_state.loaded_from_cloud and "gcp_service_account" in st.secrets:
         with st.spinner("正在从云端加载您的历史数据..."):
             if is_admin:
@@ -481,7 +537,7 @@ def patient_info_entry():
         st.session_state.loaded_from_cloud = False
         st.rerun()
 
-    # ---------- 患者选择 ----------
+    # 患者选择
     if is_admin:
         all_patient_names = list({p["患者姓名"] for p in st.session_state.patients})
     else:
@@ -496,7 +552,6 @@ def patient_info_entry():
                 selected_patient_data = p
                 break
 
-    # ---------- 输入方式 ----------
     st.subheader("基本信息输入方式")
     col_mode1, col_mode2 = st.columns(2)
     with col_mode1:
@@ -510,17 +565,27 @@ def patient_info_entry():
     if "disease_manual" not in st.session_state:
         st.session_state.disease_manual = 0.0
 
-    # ========== 表单 ==========
+    # 表单开始
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
-        # 1. 用户基本信息
+        # 1. 基本信息
         with st.expander("1️⃣ 用户基本信息", expanded=True):
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 name = st.text_input("患者姓名 *", value=selected_patient_data["患者姓名"] if selected_patient_data else "")
-                gender = st.selectbox("性别", ["男", "女"], index=["男", "女"].index(selected_patient_data["性别"]) if selected_patient_data else 0)
+                gender = st.selectbox("性别", ["男", "女"], index=["男", "女"].index(selected_patient_data["性别"]) if selected_patient_data and selected_patient_data.get("性别") in ["男", "女"] else 0)
                 phone = st.text_input("联系电话", value=selected_patient_data.get("联系电话", "") if selected_patient_data else "")
             with col2:
-                default_birth = selected_patient_data["出生日期"] if selected_patient_data else None
+                # 安全获取出生日期
+                default_birth = selected_patient_data.get("出生日期") if selected_patient_data else None
+                if isinstance(default_birth, date):
+                    pass  # okay
+                elif isinstance(default_birth, str) and default_birth.strip():
+                    try:
+                        default_birth = datetime.strptime(default_birth.strip(), "%Y-%m-%d").date()
+                    except:
+                        default_birth = None
+                else:
+                    default_birth = None
                 birth_date = st.date_input("出生日期", value=default_birth, min_value=date(1900,1,1), format="YYYY-MM-DD", key="birth")
                 auto_age = calculate_age(birth_date)
                 if age_mode == "自动计算":
@@ -533,7 +598,16 @@ def patient_info_entry():
                 if age_mode == "自动计算":
                     age_input = auto_age
             with col3:
-                default_diag = selected_patient_data["确诊日期"] if selected_patient_data else None
+                default_diag = selected_patient_data.get("确诊日期") if selected_patient_data else None
+                if isinstance(default_diag, date):
+                    pass
+                elif isinstance(default_diag, str) and default_diag.strip():
+                    try:
+                        default_diag = datetime.strptime(default_diag.strip(), "%Y-%m-%d").date()
+                    except:
+                        default_diag = None
+                else:
+                    default_diag = None
                 diagnosis_date = st.date_input("确诊日期/年月日", value=default_diag, min_value=date(1900,1,1), format="YYYY-MM-DD", key="diag")
                 auto_disease = calculate_disease_years(diagnosis_date)
                 if disease_mode == "自动计算":
@@ -823,14 +897,12 @@ def patient_info_entry():
                 supervisor = st.text_input("指导健管师", value=selected_patient_data.get("指导健管师", "") if selected_patient_data else "")
             remarks = st.text_area("备注信息", value=selected_patient_data.get("备注", "") if selected_patient_data else "")
 
-        # -------- 提交按钮 --------
         submitted = st.form_submit_button("✅ 提交并保存患者信息")
         if submitted:
             if not name:
                 st.error("患者姓名不能为空")
                 st.stop()
 
-            # 收集干预后数据为随访记录
             pre_other_list = parse_other_meds(pre_other_meds)
             post_other_list = parse_other_meds(post_other_meds)
 
@@ -891,14 +963,14 @@ def patient_info_entry():
             }
 
             if selected_patient_name != "+ 新增患者" and selected_patient_data:
-                # 追加随访记录
+                # 确保已有患者包含提交者ID
+                selected_patient_data["提交者ID"] = submitter_id if not is_admin else "admin"
                 if "随访记录" not in selected_patient_data:
                     selected_patient_data["随访记录"] = []
                 selected_patient_data["随访记录"].append(new_followup)
                 st.session_state.last_patient = selected_patient_data
                 st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
             else:
-                # 新建患者
                 base_data = {
                     "提交者ID": submitter_id if not is_admin else "admin",
                     "录入时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -966,7 +1038,6 @@ def patient_info_entry():
                 st.session_state.last_patient = base_data
                 st.success(f"✅ 患者 {name} 已新增并录入首次随访数据")
 
-            # 保存到 Google Sheets
             save_data = st.session_state.last_patient.copy()
             if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
                 save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
@@ -1010,7 +1081,6 @@ def patient_info_entry():
         df_display = pd.DataFrame(df_list)
         st.dataframe(df_display, use_container_width=True)
 
-        # 血糖曲线分析
         st.subheader("📈 血糖曲线分析")
         if len(display_patients) > 0:
             selected_patient_name = st.selectbox("选择患者", [p["患者姓名"] for p in display_patients], key="glucose_analysis")
