@@ -265,7 +265,6 @@ def load_knowledge_base(pdf_dir="pdf_data"):
     vectordb = FAISS.from_documents(chunks, embedding)
     return vectordb
 
-# ---------- 2. 构建 RAG 问答链 ----------
 def build_rag_chain(vectordb, mode="pre"):
     """
     mode: "pre"  只填了干预前数据 → 病情分析 + 方案建议
@@ -290,7 +289,7 @@ BMI：{pre_bmi}
 空腹血糖：{pre_fpg} mmol/L
 餐后2h血糖：{pre_pg2h} mmol/L
 糖化血红蛋白：{pre_hba1c}%
-体感总分：{pre_symptom_total}
+体感详细评分（0分最差，10分最好）：{pre_symptom_detail}
 其他慢病：{chronic}
 并发症：{complications}
 已选用英纽林产品：{selected_products}
@@ -301,19 +300,19 @@ BMI：{pre_bmi}
 
 请按照以下五部分输出：
 
-1. 患者糖尿病病情分析
-（根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，语气专业温和。）
+### 1. 患者糖尿病病情分析
+（根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，并**结合每一项体感评分**分析患者的主观不适状况，语气专业温和。）
 
- 2. 英纽林营养产品应用方案
+### 2. 英纽林营养产品应用方案
 （结合本地文档中英纽林系列产品（畅快/纽畅/纽畅B等）的用法，推荐适合该患者的产品、剂量、服用时间、周期。如果患者已选择了某种产品组合，请基于该组合给出具体的服用方案）
 
- 3. 日常饮食和运动管理建议
+### 3. 日常饮食和运动管理建议
 （给出具体、可操作的饮食原则与食谱建议，以及适合患者的运动类型、频率、强度，并与营养方案配合。）
 
- 4. 干预效果预期分析
-（科学预估在规范使用产品并配合生活调整后，3~6个月内各项指标可能的改善幅度，如血糖、体重、糖化等。）
+### 4. 干预效果预期分析
+（科学预估在规范使用产品并配合生活调整后，3~6个月内各项指标可能的改善幅度，如血糖、体重、糖化等，并**预测各体感项目可能的好转程度**。）
 
- 5. 总结
+### 5. 总结
 （用一段鼓励的话语总结整体方案，强调坚持的重要性，表达积极预期。）
 """
     else:
@@ -333,7 +332,7 @@ BMI：{pre_bmi}
 空腹血糖：{pre_fpg} mmol/L
 餐后2h血糖：{pre_pg2h} mmol/L
 糖化血红蛋白：{pre_hba1c}%
-体感总分：{pre_symptom_total}
+体感详细评分（0分最差，10分最好）：{pre_symptom_detail}
 其他慢病：{chronic}
 并发症：{complications}
 
@@ -346,7 +345,7 @@ BMI：{post_bmi}
 空腹血糖：{post_fpg} mmol/L
 餐后2h血糖：{post_pg2h} mmol/L
 糖化血红蛋白：{post_hba1c}%
-体感总分：{post_symptom_total}
+体感详细评分（0分最差，10分最好）：{post_symptom_detail}
 已选用英纽林产品：{selected_products}
 联合使用方案细节：{intervention_detail}
 
@@ -359,10 +358,10 @@ BMI：{post_bmi}
 
 请以热情、鼓励的口吻输出以下两部分（语气积极乐观）：
 
- 1. 糖尿病改善情况分析
-（对比干预前后的关键指标，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果患者已选择了某种产品组合，请基于该组合请根据病情推荐合适的具体应用方案，如果出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
+### 1. 糖尿病改善情况分析
+（对比干预前后的关键指标及体感变化，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果患者已选择了某种产品组合，请基于该组合推荐合适的具体应用方案，如果出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
 
- 2. 下一阶段营养干预建议
+### 2. 下一阶段营养干预建议
 （结合本地文档和当前改善程度，以及使用反馈中提到的状况，推荐下一阶段的产品使用调整（例如是否需要更换种类、调整剂量、配合其他辅助措施等）。同时给出饮食、运动方面的优化建议，帮助患者朝着更好的方向前进。）
 """
 
@@ -414,7 +413,22 @@ def generate_plan(patient_data: dict) -> str:
         "complications": patient_data.get("并发症", "无"),
     }
 
+    # 辅助函数：将体感子项字典转换为字符串
+    def symptom_dict_to_str(symptom_dict):
+        if not symptom_dict or not isinstance(symptom_dict, dict):
+            return "无数据"
+        items = []
+        for name, value in symptom_dict.items():
+            if value is None:
+                items.append(f"{name}：未知")
+            else:
+                items.append(f"{name}：{value}分")
+        return "；".join(items) if items else "无数据"
+
     # 干预前必须的指标
+    pre_symptom_dict = patient_data.get("干预前体感子项", {})
+    pre_symptom_detail = symptom_dict_to_str(pre_symptom_dict)
+
     pre_data = {
         "pre_weight": patient_data.get("干预前体重", "未知"),
         "pre_bmi": patient_data.get("干预前BMI", "未知"),
@@ -424,12 +438,15 @@ def generate_plan(patient_data: dict) -> str:
         "pre_fpg": patient_data.get("干预前FPG", "未知"),
         "pre_pg2h": patient_data.get("干预前PG120", "未知"),
         "pre_hba1c": patient_data.get("干预前糖化", "未知"),
-        "pre_symptom_total": patient_data.get("干预前体感总分", "未知"),
+        "pre_symptom_detail": pre_symptom_detail,           # 替代原来的总分
     }
 
     # 如果是干预后模式，添加干预后指标
     post_data = {}
     if mode == "post":
+        post_symptom_dict = patient_data.get("干预后体感子项", {})
+        post_symptom_detail = symptom_dict_to_str(post_symptom_dict)
+
         post_data = {
             "post_weight": patient_data.get("干预后体重", "未知"),
             "post_bmi": patient_data.get("干预后BMI", "未知"),
@@ -439,7 +456,7 @@ def generate_plan(patient_data: dict) -> str:
             "post_fpg": patient_data.get("干预后FPG", "未知"),
             "post_pg2h": patient_data.get("干预后PG120", "未知"),
             "post_hba1c": patient_data.get("干预后糖化", "未知"),
-            "post_symptom_total": patient_data.get("干预后体感总分", "未知"),
+            "post_symptom_detail": post_symptom_detail,     # 替代原来的总分
         }
 
     # 获取使用反馈并格式化
@@ -587,6 +604,7 @@ def patient_info_entry():
 
         # ===== 4. 干预前体感指标 =====
         with st.expander("4️⃣ 干预前体感指标", expanded=False):
+            st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
             pre_symptom_date = st.date_input("干预前录入日期", value=None, min_value=date(1900,1,1), key="symptom_pre_date")
             warn_date_logic("干预前体感日期", pre_symptom_date, allow_future=False)
             col1, col2, col3 = st.columns(3)
@@ -622,6 +640,7 @@ def patient_info_entry():
 
         # ===== 5. 干预后体感指标 =====
         with st.expander("5️⃣ 干预后体感指标", expanded=False):
+            st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
             post_symptom_date = st.date_input("干预后录入日期", value=None, min_value=date(1900,1,1), key="symptom_post_date")
             warn_date_logic("干预后体感日期", post_symptom_date, allow_future=False)
             col1, col2, col3 = st.columns(3)
