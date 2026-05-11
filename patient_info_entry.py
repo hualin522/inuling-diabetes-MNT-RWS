@@ -1132,84 +1132,31 @@ def patient_info_entry():
         df_display = pd.DataFrame(df_list)
         st.dataframe(df_display, use_container_width=True)
 
-        st.subheader("📈 血糖曲线分析（干预前 vs 所有随访）")
+        st.subheader("📈 血糖曲线分析")
         if len(display_patients) > 0:
             selected_patient_name = st.selectbox("选择患者", [p["患者姓名"] for p in display_patients], key="glucose_analysis")
             patient = next(p for p in display_patients if p["患者姓名"] == selected_patient_name)
-
-            # 干预前五点值
-            pre_values = [
-                patient.get("干预前FPG"), patient.get("干预前PG30"),
-                patient.get("干预前PG60"), patient.get("干预前PG120"),
-                patient.get("干预前PG180")
-            ]
-
-            # 收集所有具有完整五点数据的随访记录
-            followups = patient.get("随访记录", [])
-            valid_followups = []   # 存储 (索引, 记录)
-            for i, rec in enumerate(followups):
-                post_vals = [
-                    rec.get("干预后FPG"), rec.get("干预后PG30"),
-                    rec.get("干预后PG60"), rec.get("干预后PG120"),
-                    rec.get("干预后PG180")
-                ]
-                if all(post_vals):
-                    valid_followups.append((i, rec, post_vals))
-
-            if not valid_followups and not all(pre_values):
-                st.info("暂无完整的五点血糖数据可供绘图")
+            followup_options = ["基线（干预前）"] + [f"第{i+1}次随访 ({r['随访时间']})" for i, r in enumerate(patient.get("随访记录", []))]
+            selected_followup_idx = st.selectbox("选择随访记录", range(len(followup_options)), format_func=lambda x: followup_options[x], key="followup_select")
+            pre_values = [patient.get("干预前FPG"), patient.get("干预前PG30"), patient.get("干预前PG60"), patient.get("干预前PG120"), patient.get("干预前PG180")]
+            if selected_followup_idx == 0:
+                fig, auc = plot_glucose_curve(pre_values, "干预前血糖曲线") if all(pre_values) else (None, None)
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.metric("AUC (mmol/L·h)", auc)
+                else:
+                    st.info("干预前5点血糖数据不完整，无法绘图")
             else:
-                # 构建多条曲线
-                fig = go.Figure()
-                times = [0, 0.5, 1, 2, 3]
-                # 干预前曲线（蓝色加粗）
-                if all(pre_values):
-                    fig.add_trace(go.Scatter(
-                        x=times, y=pre_values,
-                        mode='lines+markers',
-                        name='干预前',
-                        line=dict(color='blue', width=3)
-                    ))
-
-                # 为每次随访设置不同颜色（使用 Plotly 默认颜色序列）
-                colors = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
-                for idx, (i, rec, post_vals) in enumerate(valid_followups):
-                    color = colors[idx % len(colors)]
-                    followup_date = rec.get("随访时间", f"第{i+1}次")
-                    fig.add_trace(go.Scatter(
-                        x=times, y=post_vals,
-                        mode='lines+markers',
-                        name=f'第{i+1}次随访 ({followup_date})',
-                        line=dict(color=color)
-                    ))
-
-                fig.update_layout(
-                    title=f"{selected_patient_name} - 多点血糖对比",
-                    xaxis_title='时间 (小时)',
-                    yaxis_title='血糖 (mmol/L)',
-                    xaxis=dict(tickmode='array', tickvals=times, ticktext=['空腹','0.5h','1h','2h','3h']),
-                    yaxis=dict(range=[0, None])   # 自动适应
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                # 展示 AUC 汇总表格
-                def compute_auc(vals):
-                    auc = 0
-                    for j in range(len(times)-1):
-                        auc += (vals[j] + vals[j+1]) / 2 * (times[j+1] - times[j])
-                    return round(auc, 2)
-
-                auc_data = []
-                if all(pre_values):
-                    auc_data.append({"记录": "干预前", "AUC (mmol/L·h)": compute_auc(pre_values)})
-                for i, rec, post_vals in valid_followups:
-                    auc_data.append({
-                        "记录": f"第{i+1}次随访 ({rec.get('随访时间', '')})",
-                        "AUC (mmol/L·h)": compute_auc(post_vals)
-                    })
-                if auc_data:
-                    st.subheader("AUC 汇总")
-                    st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
+                record = patient["随访记录"][selected_followup_idx - 1]
+                post_values = [record.get("干预后FPG"), record.get("干预后PG30"), record.get("干预后PG60"), record.get("干预后PG120"), record.get("干预后PG180")]
+                fig, pre_auc, post_auc = plot_combined_glucose_curve(pre_values, post_values, f"{selected_patient_name} - 干预前后对比")
+                if fig:
+                    st.plotly_chart(fig, use_container_width=True)
+                    col1, col2 = st.columns(2)
+                    with col1: st.metric("干预前 AUC", pre_auc)
+                    with col2: st.metric("干预后 AUC", post_auc)
+                else:
+                    st.info("血糖数据不完整，无法生成对比图")
 
 
 if __name__ == "__main__":
