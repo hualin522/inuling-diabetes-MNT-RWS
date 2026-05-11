@@ -1140,10 +1140,12 @@ def patient_info_entry():
             selected_followup_idx = st.selectbox("选择随访记录", range(len(followup_options)), format_func=lambda x: followup_options[x], key="followup_select")
             pre_values = [patient.get("干预前FPG"), patient.get("干预前PG30"), patient.get("干预前PG60"), patient.get("干预前PG120"), patient.get("干预前PG180")]
             if selected_followup_idx == 0:
-                fig, auc, _ = plot_glucose_curve(pre_values, "干预前血糖曲线") if all(pre_values) else (None, None, None)
+                fig, auc = plot_glucose_curve(pre_values, "干预前血糖曲线") if all(pre_values) else (None, None)
                 if fig:
                     st.plotly_chart(fig, use_container_width=True)
                     st.metric("AUC (mmol/L·h)", auc)
+                else:
+                    st.info("干预前5点血糖数据不完整，无法绘图")
             else:
                 record = patient["随访记录"][selected_followup_idx - 1]
                 post_values = [record.get("干预后FPG"), record.get("干预后PG30"), record.get("干预后PG60"), record.get("干预后PG120"), record.get("干预后PG180")]
@@ -1153,6 +1155,9 @@ def patient_info_entry():
                     col1, col2 = st.columns(2)
                     with col1: st.metric("干预前 AUC", pre_auc)
                     with col2: st.metric("干预后 AUC", post_auc)
+                else:
+                    st.info("血糖数据不完整，无法生成对比图")
+
 
 if __name__ == "__main__":
     patient_info_entry()
