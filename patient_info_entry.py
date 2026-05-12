@@ -1409,46 +1409,54 @@ def patient_info_entry():
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ===== 生化指标趋势 =====
-        st.subheader("🧪 单项生化指标变化趋势")
-        bio_fields = [
-            ("糖化血红蛋白", "干预前糖化", "干预后糖化", "%"),
-            ("总胆固醇 (TC)", "干预前TC", "干预后TC", "mmol/L"),
-            ("甘油三酯 (TG)", "干预前TG", "干预后TG", "mmol/L"),
-            ("低密度脂蛋白 (LDL-C)", "干预前LDL", "干预后LDL", "mmol/L"),
-            ("高密度脂蛋白 (HDL-C)", "干预前HDL", "干预后HDL", "mmol/L"),
-            ("谷丙转氨酶 (ALT)", "干预前ALT", "干预后ALT", "U/L"),
-            ("谷草转氨酶 (AST)", "干预前AST", "干预后AST", "U/L"),
-        ]
+        # ===== 生化指标趋势（可选显示） =====
+        show_biochem = st.checkbox("📊 显示单项生化指标变化趋势", value=False)
+        if show_biochem:
+            st.subheader("🧪 单项生化指标变化趋势")
 
-        followups_list = patient.get("随访记录", [])
-        timepoints = ["干预前"] + [f"随访{i+1}\n({r.get('随访时间', '')[:10]})" for i, r in enumerate(followups_list)]
+            # 定义需要跟踪的生化字段
+            bio_fields = [
+                ("糖化血红蛋白", "干预前糖化", "干预后糖化", "%"),
+                ("总胆固醇 (TC)", "干预前TC", "干预后TC", "mmol/L"),
+                ("甘油三酯 (TG)", "干预前TG", "干预后TG", "mmol/L"),
+                ("低密度脂蛋白 (LDL-C)", "干预前LDL", "干预后LDL", "mmol/L"),
+                ("高密度脂蛋白 (HDL-C)", "干预前HDL", "干预后HDL", "mmol/L"),
+                ("谷丙转氨酶 (ALT)", "干预前ALT", "干预后ALT", "U/L"),
+                ("谷草转氨酶 (AST)", "干预前AST", "干预后AST", "U/L"),
+            ]
 
-        for field_name, pre_key, post_key, unit in bio_fields:
-            pre_val = patient.get(pre_key)
-            post_vals = []
-            for rec in followups_list:
-                val = rec.get(post_key)
-                post_vals.append(val)
-            all_vals = [pre_val] + post_vals
+            # 准备时间点：基线(干预前) + 各次随访时间
+            followups_list = patient.get("随访记录", [])
+            timepoints = ["干预前"] + [f"随访{i+1}\n({r.get('随访时间', '')[:10]})" for i, r in enumerate(followups_list)]
 
-            if all(v is None for v in all_vals):
-                continue
+            # 生成每个指标的折线图
+            for field_name, pre_key, post_key, unit in bio_fields:
+                pre_val = patient.get(pre_key)
+                post_vals = []
+                for rec in followups_list:
+                    val = rec.get(post_key)
+                    post_vals.append(val)
+                all_vals = [pre_val] + post_vals
 
-            x_indices = list(range(len(timepoints)))
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=x_indices, y=all_vals,
-                mode='lines+markers',
-                name=field_name,
-                line=dict(color='royalblue')
-            ))
-            fig.update_layout(
-                title=f"{selected_patient_name} - {field_name}",
-                xaxis=dict(tickmode='array', tickvals=x_indices, ticktext=timepoints),
-                yaxis_title=unit,
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                if all(v is None for v in all_vals):
+                    continue
+
+                x_indices = list(range(len(timepoints)))
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=x_indices, y=all_vals,
+                    mode='lines+markers',
+                    name=field_name,
+                    line=dict(color='royalblue')
+                ))
+                fig.update_layout(
+                    title=f"{selected_patient_name} - {field_name}",
+                    xaxis=dict(tickmode='array', tickvals=x_indices, ticktext=timepoints),
+                    yaxis_title=unit,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("勾选上方复选框以查看生化指标变化趋势图")
 
 if __name__ == "__main__":
     patient_info_entry()
