@@ -706,299 +706,299 @@ def patient_info_entry():
 
         # ========== 干预前数据（大板块） ==========
         with st.expander("2️⃣ 干预前数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
-            # 干预前基本指标
-            st.markdown("##### 基本指标")
-            col1, col2 = st.columns(2)
-            with col1:
-                pre_height = st.number_input("身高 (cm)", min_value=50.0, max_value=250.0,
-                                              value=safe_float(selected_patient_data.get("干预前身高")) if selected_patient_data else None,
-                                              step=0.1, key="pre_h", disabled=selected_patient_data is not None)
-                pre_weight = st.number_input("体重 (kg)", min_value=10.0, max_value=300.0,
-                                              value=safe_float(selected_patient_data.get("干预前体重")) if selected_patient_data else None,
-                                              step=0.1, key="pre_w", disabled=selected_patient_data is not None)
-            with col2:
-                pre_waist = st.number_input("腰围 (cm)", min_value=50.0, max_value=200.0,
-                                             value=safe_float(selected_patient_data.get("干预前腰围")) if selected_patient_data else None,
-                                             step=0.1, disabled=selected_patient_data is not None)
-                pre_hip = st.number_input("臀围 (cm)", min_value=50.0, max_value=200.0,
-                                           value=safe_float(selected_patient_data.get("干预前臀围")) if selected_patient_data else None,
-                                           step=0.1, disabled=selected_patient_data is not None)
-            col1, col2 = st.columns(2)
-            with col1:
-                pre_sbp = st.number_input("高压 (mmHg)", min_value=50.0, max_value=250.0,
-                                           value=safe_float(selected_patient_data.get("干预前高压")) if selected_patient_data else None,
-                                           step=1.0, disabled=selected_patient_data is not None)
-            with col2:
-                pre_dbp = st.number_input("低压 (mmHg)", min_value=30.0, max_value=150.0,
-                                           value=safe_float(selected_patient_data.get("干预前低压")) if selected_patient_data else None,
-                                           step=1.0, disabled=selected_patient_data is not None)
-            pre_bmi = calculate_bmi(pre_height, pre_weight)
+                # 干预前基本指标
+            with st.expander("基本指标", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    pre_height = st.number_input("身高 (cm)", min_value=50.0, max_value=250.0,
+                                                value=safe_float(selected_patient_data.get("干预前身高")) if selected_patient_data else None,
+                                                step=0.1, key="pre_h", disabled=selected_patient_data is not None)
+                    pre_weight = st.number_input("体重 (kg)", min_value=10.0, max_value=300.0,
+                                                value=safe_float(selected_patient_data.get("干预前体重")) if selected_patient_data else None,
+                                                step=0.1, key="pre_w", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_waist = st.number_input("腰围 (cm)", min_value=50.0, max_value=200.0,
+                                                value=safe_float(selected_patient_data.get("干预前腰围")) if selected_patient_data else None,
+                                                step=0.1, disabled=selected_patient_data is not None)
+                    pre_hip = st.number_input("臀围 (cm)", min_value=50.0, max_value=200.0,
+                                            value=safe_float(selected_patient_data.get("干预前臀围")) if selected_patient_data else None,
+                                            step=0.1, disabled=selected_patient_data is not None)
+                col1, col2 = st.columns(2)
+                with col1:
+                    pre_sbp = st.number_input("高压 (mmHg)", min_value=50.0, max_value=250.0,
+                                            value=safe_float(selected_patient_data.get("干预前高压")) if selected_patient_data else None,
+                                            step=1.0, disabled=selected_patient_data is not None)
+                with col2:
+                    pre_dbp = st.number_input("低压 (mmHg)", min_value=30.0, max_value=150.0,
+                                            value=safe_float(selected_patient_data.get("干预前低压")) if selected_patient_data else None,
+                                            step=1.0, disabled=selected_patient_data is not None)
+                pre_bmi = calculate_bmi(pre_height, pre_weight)
 
-            # 干预前5点血糖
-            st.markdown("##### 五点血糖")
-            pre_glyc_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前5点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_glyc_date", disabled=selected_patient_data is not None)
-            pre_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1,
-                                      value=safe_float(selected_patient_data.get("干预前FPG")) if selected_patient_data else None,
-                                      key="pre_fpg", disabled=selected_patient_data is not None)
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                pre_pg30 = st.number_input("PG 30min (mmol/L)", min_value=0.0, step=0.1,
-                                           value=safe_float(selected_patient_data.get("干预前PG30")) if selected_patient_data else None,
-                                           key="pre_pg30", disabled=selected_patient_data is not None)
-            with col2:
-                pre_pg60 = st.number_input("PG 60min (mmol/L)", min_value=0.0, step=0.1,
-                                           value=safe_float(selected_patient_data.get("干预前PG60")) if selected_patient_data else None,
-                                           key="pre_pg60", disabled=selected_patient_data is not None)
-            with col3:
-                pre_pg120 = st.number_input("PG 120min (mmol/L)", min_value=0.0, step=0.1,
-                                            value=safe_float(selected_patient_data.get("干预前PG120")) if selected_patient_data else None,
-                                            key="pre_pg120", disabled=selected_patient_data is not None)
-            with col4:
-                pre_pg180 = st.number_input("PG 180min (mmol/L)", min_value=0.0, step=0.1,
-                                            value=safe_float(selected_patient_data.get("干预前PG180")) if selected_patient_data else None,
-                                            key="pre_pg180", disabled=selected_patient_data is not None)
+                # 干预前5点血糖
+            with st.expander("5点血糖", expanded=False):
+                pre_glyc_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前5点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_glyc_date", disabled=selected_patient_data is not None)
+                pre_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1,
+                                        value=safe_float(selected_patient_data.get("干预前FPG")) if selected_patient_data else None,
+                                        key="pre_fpg", disabled=selected_patient_data is not None)
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    pre_pg30 = st.number_input("PG 30min (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前PG30")) if selected_patient_data else None,
+                                            key="pre_pg30", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_pg60 = st.number_input("PG 60min (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前PG60")) if selected_patient_data else None,
+                                            key="pre_pg60", disabled=selected_patient_data is not None)
+                with col3:
+                    pre_pg120 = st.number_input("PG 120min (mmol/L)", min_value=0.0, step=0.1,
+                                                value=safe_float(selected_patient_data.get("干预前PG120")) if selected_patient_data else None,
+                                                key="pre_pg120", disabled=selected_patient_data is not None)
+                with col4:
+                    pre_pg180 = st.number_input("PG 180min (mmol/L)", min_value=0.0, step=0.1,
+                                                value=safe_float(selected_patient_data.get("干预前PG180")) if selected_patient_data else None,
+                                                key="pre_pg180", disabled=selected_patient_data is not None)
 
-            # 干预前体感指标
-            st.markdown("##### 体感指标")
-            st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
-            pre_symptom_date = st.date_input("录入日期", value=safe_date(selected_patient_data.get("干预前体感日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="symptom_pre_date", disabled=selected_patient_data is not None)
-            st.caption("如果与五点血糖检测日期相同，可不填")
-            pre_scores = selected_patient_data.get("干预前体感子项", {}) if selected_patient_data else {}
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                pre_halitosis = st.number_input("口臭", 1, 10, value=pre_scores.get("口臭"), key="pre_hal", disabled=selected_patient_data is not None)
-                pre_defecation = st.number_input("排便情况", 1, 10, value=pre_scores.get("排便情况"), key="pre_def", disabled=selected_patient_data is not None)
-                pre_gi = st.number_input("胃肠道", 1, 10, value=pre_scores.get("胃肠道"), key="pre_gi", disabled=selected_patient_data is not None)
-                pre_numbness = st.number_input("四肢麻木", 1, 10, value=pre_scores.get("四肢麻木"), key="pre_num", disabled=selected_patient_data is not None)
-            with col2:
-                pre_pruritus = st.number_input("皮肤瘙痒", 1, 10, value=pre_scores.get("皮肤瘙痒"), key="pre_pru", disabled=selected_patient_data is not None)
-                pre_sleep = st.number_input("睡眠", 1, 10, value=pre_scores.get("睡眠"), key="pre_sleep", disabled=selected_patient_data is not None)
-                pre_vision = st.number_input("视物", 1, 10, value=pre_scores.get("视物"), key="pre_vis", disabled=selected_patient_data is not None)
-                pre_fatigue = st.number_input("乏力", 1, 10, value=pre_scores.get("乏力"), key="pre_fat", disabled=selected_patient_data is not None)
-            with col3:
-                pre_polydipsia = st.number_input("多饮", 1, 10, value=pre_scores.get("多饮"), key="pre_polyd", disabled=selected_patient_data is not None)
-                pre_polyphagia = st.number_input("多食", 1, 10, value=pre_scores.get("多食"), key="pre_polyp", disabled=selected_patient_data is not None)
-                pre_polyuria = st.number_input("多尿", 1, 10, value=pre_scores.get("多尿"), key="pre_polyu", disabled=selected_patient_data is not None)
-                pre_lumbago = st.number_input("腰膝酸软", 1, 10, value=pre_scores.get("腰膝酸软"), key="pre_lumb", disabled=selected_patient_data is not None)
-            col1, col2 = st.columns(2)
-            with col1:
-                pre_night_sweat = st.number_input("盗汗情况", 1, 10, value=pre_scores.get("盗汗情况"), key="pre_night", disabled=selected_patient_data is not None)
-            with col2:
-                pre_mood = st.number_input("情绪状况", 1, 10, value=pre_scores.get("情绪状况"), key="pre_mood", disabled=selected_patient_data is not None)
-            pre_symptom_scores = {
-                "口臭": pre_halitosis, "排便情况": pre_defecation, "胃肠道": pre_gi,
-                "四肢麻木": pre_numbness, "皮肤瘙痒": pre_pruritus, "睡眠": pre_sleep,
-                "视物": pre_vision, "乏力": pre_fatigue, "多饮": pre_polydipsia,
-                "多食": pre_polyphagia, "多尿": pre_polyuria, "腰膝酸软": pre_lumbago,
-                "盗汗情况": pre_night_sweat, "情绪状况": pre_mood
-            }
-            pre_total = calculate_symptom_total(pre_symptom_scores)
+                # 干预前体感指标
+            with st.expander("体感指标", expanded=False):
+                st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
+                pre_symptom_date = st.date_input("录入日期", value=safe_date(selected_patient_data.get("干预前体感日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="symptom_pre_date", disabled=selected_patient_data is not None)
+                st.caption("如果与五点血糖检测日期相同，可不填")
+                pre_scores = selected_patient_data.get("干预前体感子项", {}) if selected_patient_data else {}
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pre_halitosis = st.number_input("口臭", 1, 10, value=pre_scores.get("口臭"), key="pre_hal", disabled=selected_patient_data is not None)
+                    pre_defecation = st.number_input("排便情况", 1, 10, value=pre_scores.get("排便情况"), key="pre_def", disabled=selected_patient_data is not None)
+                    pre_gi = st.number_input("胃肠道", 1, 10, value=pre_scores.get("胃肠道"), key="pre_gi", disabled=selected_patient_data is not None)
+                    pre_numbness = st.number_input("四肢麻木", 1, 10, value=pre_scores.get("四肢麻木"), key="pre_num", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_pruritus = st.number_input("皮肤瘙痒", 1, 10, value=pre_scores.get("皮肤瘙痒"), key="pre_pru", disabled=selected_patient_data is not None)
+                    pre_sleep = st.number_input("睡眠", 1, 10, value=pre_scores.get("睡眠"), key="pre_sleep", disabled=selected_patient_data is not None)
+                    pre_vision = st.number_input("视物", 1, 10, value=pre_scores.get("视物"), key="pre_vis", disabled=selected_patient_data is not None)
+                    pre_fatigue = st.number_input("乏力", 1, 10, value=pre_scores.get("乏力"), key="pre_fat", disabled=selected_patient_data is not None)
+                with col3:
+                    pre_polydipsia = st.number_input("多饮", 1, 10, value=pre_scores.get("多饮"), key="pre_polyd", disabled=selected_patient_data is not None)
+                    pre_polyphagia = st.number_input("多食", 1, 10, value=pre_scores.get("多食"), key="pre_polyp", disabled=selected_patient_data is not None)
+                    pre_polyuria = st.number_input("多尿", 1, 10, value=pre_scores.get("多尿"), key="pre_polyu", disabled=selected_patient_data is not None)
+                    pre_lumbago = st.number_input("腰膝酸软", 1, 10, value=pre_scores.get("腰膝酸软"), key="pre_lumb", disabled=selected_patient_data is not None)
+                col1, col2 = st.columns(2)
+                with col1:
+                    pre_night_sweat = st.number_input("盗汗情况", 1, 10, value=pre_scores.get("盗汗情况"), key="pre_night", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_mood = st.number_input("情绪状况", 1, 10, value=pre_scores.get("情绪状况"), key="pre_mood", disabled=selected_patient_data is not None)
+                pre_symptom_scores = {
+                    "口臭": pre_halitosis, "排便情况": pre_defecation, "胃肠道": pre_gi,
+                    "四肢麻木": pre_numbness, "皮肤瘙痒": pre_pruritus, "睡眠": pre_sleep,
+                    "视物": pre_vision, "乏力": pre_fatigue, "多饮": pre_polydipsia,
+                    "多食": pre_polyphagia, "多尿": pre_polyuria, "腰膝酸软": pre_lumbago,
+                    "盗汗情况": pre_night_sweat, "情绪状况": pre_mood
+                }
+                pre_total = calculate_symptom_total(pre_symptom_scores)
 
-            # 干预前糖尿病药物
-            st.markdown("##### 糖尿病药物")
-            st.subheader("胰岛素")
-            col1, col2 = st.columns(2)
-            with col1:
-                pre_insulin_times = st.number_input("胰岛素 (次/天)", min_value=0.0, step=1.0,
-                                                     value=safe_float(selected_patient_data.get("干预前胰岛素次/天")) if selected_patient_data else None,
-                                                     key="pre_ins_times", disabled=selected_patient_data is not None)
-                pre_insulin_dose = st.number_input("剂量/次 (IU)", min_value=0.0, step=1.0,
-                                                    value=safe_float(selected_patient_data.get("干预前胰岛素剂量/次")) if selected_patient_data else None,
-                                                    key="pre_ins_dose", disabled=selected_patient_data is not None)
-            with col2:
-                pass
-            st.subheader("口服药")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                pre_metformin_times = st.number_input("二甲双胍 (天/次)", min_value=0.0, step=1.0,
-                                                       value=safe_float(selected_patient_data.get("干预前二甲双胍天/次")) if selected_patient_data else None,
-                                                       key="pre_met_times", disabled=selected_patient_data is not None)
-                pre_metformin_dose = st.number_input("二甲双胍 剂量/次 (mg)", min_value=0.0, step=250.0,
-                                                      value=safe_float(selected_patient_data.get("干预前二甲双胍剂量/次")) if selected_patient_data else None,
-                                                      key="pre_met_dose", disabled=selected_patient_data is not None)
-            with col2:
-                pre_acarbose_times = st.number_input("阿卡波糖 (天/次)", min_value=0.0, step=1.0,
-                                                      value=safe_float(selected_patient_data.get("干预前阿卡波糖天/次")) if selected_patient_data else None,
-                                                      key="pre_acb_times", disabled=selected_patient_data is not None)
-                pre_acarbose_dose = st.number_input("阿卡波糖 剂量/次 (mg)", min_value=0.0, step=50.0,
-                                                     value=safe_float(selected_patient_data.get("干预前阿卡波糖剂量/次")) if selected_patient_data else None,
-                                                     key="pre_acb_dose", disabled=selected_patient_data is not None)
-            with col3:
-                pre_other_meds = st.text_area("其他药物", value="" if not selected_patient_data else "", placeholder="每行：药名，每天次数，每次剂量",
-                                              key="pre_other_meds", disabled=selected_patient_data is not None)
+                # 干预前糖尿病药物
+            with st.expander("糖尿病药物", expanded=False):
+                st.subheader("胰岛素")
+                col1, col2 = st.columns(2)
+                with col1:
+                    pre_insulin_times = st.number_input("胰岛素 (次/天)", min_value=0.0, step=1.0,
+                                                        value=safe_float(selected_patient_data.get("干预前胰岛素次/天")) if selected_patient_data else None,
+                                                        key="pre_ins_times", disabled=selected_patient_data is not None)
+                    pre_insulin_dose = st.number_input("剂量/次 (IU)", min_value=0.0, step=1.0,
+                                                        value=safe_float(selected_patient_data.get("干预前胰岛素剂量/次")) if selected_patient_data else None,
+                                                        key="pre_ins_dose", disabled=selected_patient_data is not None)
+                with col2:
+                    pass
+                st.subheader("口服药")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    pre_metformin_times = st.number_input("二甲双胍 (天/次)", min_value=0.0, step=1.0,
+                                                        value=safe_float(selected_patient_data.get("干预前二甲双胍天/次")) if selected_patient_data else None,
+                                                        key="pre_met_times", disabled=selected_patient_data is not None)
+                    pre_metformin_dose = st.number_input("二甲双胍 剂量/次 (mg)", min_value=0.0, step=250.0,
+                                                        value=safe_float(selected_patient_data.get("干预前二甲双胍剂量/次")) if selected_patient_data else None,
+                                                        key="pre_met_dose", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_acarbose_times = st.number_input("阿卡波糖 (天/次)", min_value=0.0, step=1.0,
+                                                        value=safe_float(selected_patient_data.get("干预前阿卡波糖天/次")) if selected_patient_data else None,
+                                                        key="pre_acb_times", disabled=selected_patient_data is not None)
+                    pre_acarbose_dose = st.number_input("阿卡波糖 剂量/次 (mg)", min_value=0.0, step=50.0,
+                                                        value=safe_float(selected_patient_data.get("干预前阿卡波糖剂量/次")) if selected_patient_data else None,
+                                                        key="pre_acb_dose", disabled=selected_patient_data is not None)
+                with col3:
+                    pre_other_meds = st.text_area("其他药物", value="" if not selected_patient_data else "", placeholder="每行：药名，每天次数，每次剂量",
+                                                key="pre_other_meds", disabled=selected_patient_data is not None)
 
-            # 干预前生化指标
-            st.markdown("##### 生化指标")
-            pre_bio_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前生化日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_bio_date", disabled=selected_patient_data is not None)
-            st.caption("如果与五点血糖检测日期相同，可不填")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                pre_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1,
-                                             value=safe_float(selected_patient_data.get("干预前糖化")) if selected_patient_data else None,
-                                             key="pre_hba1c", disabled=selected_patient_data is not None)
-                pre_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1,
-                                         value=safe_float(selected_patient_data.get("干预前TC")) if selected_patient_data else None,
-                                         key="pre_tc", disabled=selected_patient_data is not None)
-            with col2:
-                pre_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1,
-                                         value=safe_float(selected_patient_data.get("干预前TG")) if selected_patient_data else None,
-                                         key="pre_tg", disabled=selected_patient_data is not None)
-                pre_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1,
-                                          value=safe_float(selected_patient_data.get("干预前LDL")) if selected_patient_data else None,
-                                          key="pre_ldl", disabled=selected_patient_data is not None)
-            with col3:
-                pre_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1,
-                                          value=safe_float(selected_patient_data.get("干预前HDL")) if selected_patient_data else None,
-                                          key="pre_hdl", disabled=selected_patient_data is not None)
-                pre_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0,
-                                          value=safe_float(selected_patient_data.get("干预前ALT")) if selected_patient_data else None,
-                                          key="pre_alt", disabled=selected_patient_data is not None)
-            with col4:
-                pre_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0,
-                                          value=safe_float(selected_patient_data.get("干预前AST")) if selected_patient_data else None,
-                                          key="pre_ast", disabled=selected_patient_data is not None)
+                # 干预前生化指标
+            with st.expander("生化指标", expanded=False):
+                pre_bio_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前生化日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_bio_date", disabled=selected_patient_data is not None)
+                st.caption("如果与五点血糖检测日期相同，可不填")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    pre_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1,
+                                                value=safe_float(selected_patient_data.get("干预前糖化")) if selected_patient_data else None,
+                                                key="pre_hba1c", disabled=selected_patient_data is not None)
+                    pre_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前TC")) if selected_patient_data else None,
+                                            key="pre_tc", disabled=selected_patient_data is not None)
+                with col2:
+                    pre_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前TG")) if selected_patient_data else None,
+                                            key="pre_tg", disabled=selected_patient_data is not None)
+                    pre_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前LDL")) if selected_patient_data else None,
+                                            key="pre_ldl", disabled=selected_patient_data is not None)
+                with col3:
+                    pre_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前HDL")) if selected_patient_data else None,
+                                            key="pre_hdl", disabled=selected_patient_data is not None)
+                    pre_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0,
+                                            value=safe_float(selected_patient_data.get("干预前ALT")) if selected_patient_data else None,
+                                            key="pre_alt", disabled=selected_patient_data is not None)
+                with col4:
+                    pre_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0,
+                                            value=safe_float(selected_patient_data.get("干预前AST")) if selected_patient_data else None,
+                                            key="pre_ast", disabled=selected_patient_data is not None)
 
-            # 干预前7点血糖
-            st.markdown("##### 日常7点血糖")
-            pre_7_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前7点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_7_date", disabled=selected_patient_data is not None)
-            cols = st.columns(7)
-            with cols[0]:
-                pre_bf_before = st.number_input("早餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐前")) if selected_patient_data else None, key="pre_bf_before", disabled=selected_patient_data is not None)
-            with cols[1]:
-                pre_bf_after = st.number_input("早餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐后2h")) if selected_patient_data else None, key="pre_bf_after", disabled=selected_patient_data is not None)
-            with cols[2]:
-                pre_lunch_before = st.number_input("午餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐前")) if selected_patient_data else None, key="pre_lunch_before", disabled=selected_patient_data is not None)
-            with cols[3]:
-                pre_lunch_after = st.number_input("午餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐后2h")) if selected_patient_data else None, key="pre_lunch_after", disabled=selected_patient_data is not None)
-            with cols[4]:
-                pre_dinner_before = st.number_input("晚餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐前")) if selected_patient_data else None, key="pre_dinner_before", disabled=selected_patient_data is not None)
-            with cols[5]:
-                pre_dinner_after = st.number_input("晚餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐后2h")) if selected_patient_data else None, key="pre_dinner_after", disabled=selected_patient_data is not None)
-            with cols[6]:
-                pre_bed = st.number_input("睡前", step=0.1, value=safe_float(selected_patient_data.get("干预前睡前")) if selected_patient_data else None, key="pre_bed", disabled=selected_patient_data is not None)
+                # 干预前7点血糖
+            with st.expander("日常7点血糖", expanded=False):
+                pre_7_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前7点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_7_date", disabled=selected_patient_data is not None)
+                cols = st.columns(7)
+                with cols[0]:
+                    pre_bf_before = st.number_input("早餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐前")) if selected_patient_data else None, key="pre_bf_before", disabled=selected_patient_data is not None)
+                with cols[1]:
+                    pre_bf_after = st.number_input("早餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐后2h")) if selected_patient_data else None, key="pre_bf_after", disabled=selected_patient_data is not None)
+                with cols[2]:
+                    pre_lunch_before = st.number_input("午餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐前")) if selected_patient_data else None, key="pre_lunch_before", disabled=selected_patient_data is not None)
+                with cols[3]:
+                    pre_lunch_after = st.number_input("午餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐后2h")) if selected_patient_data else None, key="pre_lunch_after", disabled=selected_patient_data is not None)
+                with cols[4]:
+                    pre_dinner_before = st.number_input("晚餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐前")) if selected_patient_data else None, key="pre_dinner_before", disabled=selected_patient_data is not None)
+                with cols[5]:
+                    pre_dinner_after = st.number_input("晚餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐后2h")) if selected_patient_data else None, key="pre_dinner_after", disabled=selected_patient_data is not None)
+                with cols[6]:
+                    pre_bed = st.number_input("睡前", step=0.1, value=safe_float(selected_patient_data.get("干预前睡前")) if selected_patient_data else None, key="pre_bed", disabled=selected_patient_data is not None)
 
         # ========== 干预后数据（大板块） ==========
         with st.expander("3️⃣ 干预后数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
-            # 干预后基本指标
-            st.markdown("##### 基本指标")
-            col1, col2 = st.columns(2)
-            with col1:
-                post_height = st.number_input("身高 (cm)", min_value=50.0, max_value=250.0, value=pre_height, step=0.1, key="post_h", disabled=True)
-                post_weight = st.number_input("体重 (kg)", min_value=10.0, max_value=300.0, value=None, step=0.1, key="post_w")
-            with col2:
-                post_waist = st.number_input("腰围 (cm)", min_value=50.0, max_value=200.0, value=None, step=0.1, key="post_wc")
-                post_hip = st.number_input("臀围 (cm)", min_value=50.0, max_value=200.0, value=None, step=0.1, key="post_hc")
-            col1, col2 = st.columns(2)
-            with col1:
-                post_sbp = st.number_input("高压 (mmHg)", min_value=50.0, max_value=250.0, value=None, step=1.0, key="post_sbp")
-            with col2:
-                post_dbp = st.number_input("低压 (mmHg)", min_value=30.0, max_value=150.0, value=None, step=1.0, key="post_dbp")
-            post_bmi = calculate_bmi(post_height, post_weight)
+                # 干预后基本指标
+            with st.expander("基本指标", expanded=False): 
+                col1, col2 = st.columns(2)
+                with col1:
+                    post_height = st.number_input("身高 (cm)", min_value=50.0, max_value=250.0, value=pre_height, step=0.1, key="post_h", disabled=True)
+                    post_weight = st.number_input("体重 (kg)", min_value=10.0, max_value=300.0, value=None, step=0.1, key="post_w")
+                with col2:
+                    post_waist = st.number_input("腰围 (cm)", min_value=50.0, max_value=200.0, value=None, step=0.1, key="post_wc")
+                    post_hip = st.number_input("臀围 (cm)", min_value=50.0, max_value=200.0, value=None, step=0.1, key="post_hc")
+                col1, col2 = st.columns(2)
+                with col1:
+                    post_sbp = st.number_input("高压 (mmHg)", min_value=50.0, max_value=250.0, value=None, step=1.0, key="post_sbp")
+                with col2:
+                    post_dbp = st.number_input("低压 (mmHg)", min_value=30.0, max_value=150.0, value=None, step=1.0, key="post_dbp")
+                post_bmi = calculate_bmi(post_height, post_weight)
 
-            # 干预后5点血糖
-            st.markdown("##### 五点血糖")
-            post_glyc_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_glyc_date")
-            post_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_fpg")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                post_pg30 = st.number_input("PG 30min", min_value=0.0, step=0.1, value=None, key="post_30")
-            with col2:
-                post_pg60 = st.number_input("PG 60min", min_value=0.0, step=0.1, value=None, key="post_60")
-            with col3:
-                post_pg120 = st.number_input("PG 120min", min_value=0.0, step=0.1, value=None, key="post_120")
-            with col4:
-                post_pg180 = st.number_input("PG 180min", min_value=0.0, step=0.1, value=None, key="post_180")
+                # 干预后5点血糖
+            with st.expander("5点血糖", expanded=False):
+                post_glyc_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_glyc_date")
+                post_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_fpg")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    post_pg30 = st.number_input("PG 30min", min_value=0.0, step=0.1, value=None, key="post_30")
+                with col2:
+                    post_pg60 = st.number_input("PG 60min", min_value=0.0, step=0.1, value=None, key="post_60")
+                with col3:
+                    post_pg120 = st.number_input("PG 120min", min_value=0.0, step=0.1, value=None, key="post_120")
+                with col4:
+                    post_pg180 = st.number_input("PG 180min", min_value=0.0, step=0.1, value=None, key="post_180")
 
-            # 干预后体感指标
-            st.markdown("##### 体感指标")
-            st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
-            post_symptom_date = st.date_input("录入日期", value=None, min_value=date(1900,1,1), key="symptom_post_date")
-            st.caption("如果与五点血糖检测日期相同，可不填")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                post_halitosis = st.number_input("口臭", 1, 10, value=None, key="post_hal")
-                post_defecation = st.number_input("排便情况", 1, 10, value=None, key="post_def")
-                post_gi = st.number_input("胃肠道", 1, 10, value=None, key="post_gi")
-                post_numbness = st.number_input("四肢麻木", 1, 10, value=None, key="post_num")
-            with col2:
-                post_pruritus = st.number_input("皮肤瘙痒", 1, 10, value=None, key="post_pru")
-                post_sleep = st.number_input("睡眠", 1, 10, value=None, key="post_sleep")
-                post_vision = st.number_input("视物", 1, 10, value=None, key="post_vis")
-                post_fatigue = st.number_input("乏力", 1, 10, value=None, key="post_fat")
-            with col3:
-                post_polydipsia = st.number_input("多饮", 1, 10, value=None, key="post_polyd")
-                post_polyphagia = st.number_input("多食", 1, 10, value=None, key="post_polyp")
-                post_polyuria = st.number_input("多尿", 1, 10, value=None, key="post_polyu")
-                post_lumbago = st.number_input("腰膝酸软", 1, 10, value=None, key="post_lumb")
-            col1, col2 = st.columns(2)
-            with col1:
-                post_night_sweat = st.number_input("盗汗情况", 1, 10, value=None, key="post_night")
-            with col2:
-                post_mood = st.number_input("情绪状况", 1, 10, value=None, key="post_mood")
-            post_symptom_scores = {
-                "口臭": post_halitosis, "排便情况": post_defecation, "胃肠道": post_gi,
-                "四肢麻木": post_numbness, "皮肤瘙痒": post_pruritus, "睡眠": post_sleep,
-                "视物": post_vision, "乏力": post_fatigue, "多饮": post_polydipsia,
-                "多食": post_polyphagia, "多尿": post_polyuria, "腰膝酸软": post_lumbago,
-                "盗汗情况": post_night_sweat, "情绪状况": post_mood
-            }
-            post_total = calculate_symptom_total(post_symptom_scores)
+                # 干预后体感指标
+            with st.expander("体感指标", expanded=False):
+                st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
+                post_symptom_date = st.date_input("录入日期", value=None, min_value=date(1900,1,1), key="symptom_post_date")
+                st.caption("如果与五点血糖检测日期相同，可不填")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    post_halitosis = st.number_input("口臭", 1, 10, value=None, key="post_hal")
+                    post_defecation = st.number_input("排便情况", 1, 10, value=None, key="post_def")
+                    post_gi = st.number_input("胃肠道", 1, 10, value=None, key="post_gi")
+                    post_numbness = st.number_input("四肢麻木", 1, 10, value=None, key="post_num")
+                with col2:
+                    post_pruritus = st.number_input("皮肤瘙痒", 1, 10, value=None, key="post_pru")
+                    post_sleep = st.number_input("睡眠", 1, 10, value=None, key="post_sleep")
+                    post_vision = st.number_input("视物", 1, 10, value=None, key="post_vis")
+                    post_fatigue = st.number_input("乏力", 1, 10, value=None, key="post_fat")
+                with col3:
+                    post_polydipsia = st.number_input("多饮", 1, 10, value=None, key="post_polyd")
+                    post_polyphagia = st.number_input("多食", 1, 10, value=None, key="post_polyp")
+                    post_polyuria = st.number_input("多尿", 1, 10, value=None, key="post_polyu")
+                    post_lumbago = st.number_input("腰膝酸软", 1, 10, value=None, key="post_lumb")
+                col1, col2 = st.columns(2)
+                with col1:
+                    post_night_sweat = st.number_input("盗汗情况", 1, 10, value=None, key="post_night")
+                with col2:
+                    post_mood = st.number_input("情绪状况", 1, 10, value=None, key="post_mood")
+                post_symptom_scores = {
+                    "口臭": post_halitosis, "排便情况": post_defecation, "胃肠道": post_gi,
+                    "四肢麻木": post_numbness, "皮肤瘙痒": post_pruritus, "睡眠": post_sleep,
+                    "视物": post_vision, "乏力": post_fatigue, "多饮": post_polydipsia,
+                    "多食": post_polyphagia, "多尿": post_polyuria, "腰膝酸软": post_lumbago,
+                    "盗汗情况": post_night_sweat, "情绪状况": post_mood
+                }
+                post_total = calculate_symptom_total(post_symptom_scores)
 
-            # 干预后糖尿病药物
-            st.markdown("##### 糖尿病药物")
-            st.subheader("胰岛素")
-            col1, col2 = st.columns(2)
-            with col1:
-                post_insulin_times = st.number_input("胰岛素 (次/天)", min_value=0.0, step=1.0, value=None, key="post_ins_times")
-                post_insulin_dose = st.number_input("剂量/次 (IU)", min_value=0.0, step=1.0, value=None, key="post_ins_dose")
-            with col2:
-                pass
-            st.subheader("口服药")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                post_metformin_times = st.number_input("二甲双胍 (天/次)", min_value=0.0, step=1.0, value=None, key="post_met_times")
-                post_metformin_dose = st.number_input("二甲双胍 剂量/次 (mg)", min_value=0.0, step=250.0, value=None, key="post_met_dose")
-            with col2:
-                post_acarbose_times = st.number_input("阿卡波糖 (天/次)", min_value=0.0, step=1.0, value=None, key="post_acb_times")
-                post_acarbose_dose = st.number_input("阿卡波糖 剂量/次 (mg)", min_value=0.0, step=50.0, value=None, key="post_acb_dose")
-            with col3:
-                post_other_meds = st.text_area("其他药物", placeholder="每行：药名，每天次数，每次剂量", key="post_other_meds")
+                # 干预后糖尿病药物
+            with st.expander("糖尿病药物", expanded=False):
+                st.subheader("胰岛素")
+                col1, col2 = st.columns(2)
+                with col1:
+                    post_insulin_times = st.number_input("胰岛素 (次/天)", min_value=0.0, step=1.0, value=None, key="post_ins_times")
+                    post_insulin_dose = st.number_input("剂量/次 (IU)", min_value=0.0, step=1.0, value=None, key="post_ins_dose")
+                with col2:
+                    pass
+                st.subheader("口服药")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    post_metformin_times = st.number_input("二甲双胍 (天/次)", min_value=0.0, step=1.0, value=None, key="post_met_times")
+                    post_metformin_dose = st.number_input("二甲双胍 剂量/次 (mg)", min_value=0.0, step=250.0, value=None, key="post_met_dose")
+                with col2:
+                    post_acarbose_times = st.number_input("阿卡波糖 (天/次)", min_value=0.0, step=1.0, value=None, key="post_acb_times")
+                    post_acarbose_dose = st.number_input("阿卡波糖 剂量/次 (mg)", min_value=0.0, step=50.0, value=None, key="post_acb_dose")
+                with col3:
+                    post_other_meds = st.text_area("其他药物", placeholder="每行：药名，每天次数，每次剂量", key="post_other_meds")
 
-            # 干预后生化指标
-            st.markdown("##### 生化指标")
-            post_bio_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_bio_date")
-            st.caption("如果与五点血糖检测日期相同，可不填")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                post_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1, value=None, key="post_hba1c")
-                post_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
-            with col2:
-                post_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tg")
-                post_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_ldl")
-            with col3:
-                post_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_hdl")
-                post_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0, value=None, key="post_alt")
-            with col4:
-                post_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0, value=None, key="post_ast")
+                # 干预后生化指标
+            with st.expander("生化指标", expanded=False):
+                post_bio_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_bio_date")
+                st.caption("如果与五点血糖检测日期相同，可不填")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    post_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1, value=None, key="post_hba1c")
+                    post_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
+                with col2:
+                    post_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tg")
+                    post_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_ldl")
+                with col3:
+                    post_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_hdl")
+                    post_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0, value=None, key="post_alt")
+                with col4:
+                    post_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0, value=None, key="post_ast")
 
-            # 干预后7点血糖
-            st.markdown("##### 日常7点血糖")
-            post_7_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_7_date")
-            cols = st.columns(7)
-            with cols[0]:
-                post_bf_before = st.number_input("早餐前", step=0.1, value=None, key="post_bf_before")
-            with cols[1]:
-                post_bf_after = st.number_input("早餐后2h", step=0.1, value=None, key="post_bf_after")
-            with cols[2]:
-                post_lunch_before = st.number_input("午餐前", step=0.1, value=None, key="post_lunch_before")
-            with cols[3]:
-                post_lunch_after = st.number_input("午餐后2h", step=0.1, value=None, key="post_lunch_after")
-            with cols[4]:
-                post_dinner_before = st.number_input("晚餐前", step=0.1, value=None, key="post_dinner_before")
-            with cols[5]:
-                post_dinner_after = st.number_input("晚餐后2h", step=0.1, value=None, key="post_dinner_after")
-            with cols[6]:
-                post_bed = st.number_input("睡前", step=0.1, value=None, key="post_bed")
+                # 干预后7点血糖
+            with st.expander("日常7点血糖", expanded=False):
+                post_7_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_7_date")
+                cols = st.columns(7)
+                with cols[0]:
+                    post_bf_before = st.number_input("早餐前", step=0.1, value=None, key="post_bf_before")
+                with cols[1]:
+                    post_bf_after = st.number_input("早餐后2h", step=0.1, value=None, key="post_bf_after")
+                with cols[2]:
+                    post_lunch_before = st.number_input("午餐前", step=0.1, value=None, key="post_lunch_before")
+                with cols[3]:
+                    post_lunch_after = st.number_input("午餐后2h", step=0.1, value=None, key="post_lunch_after")
+                with cols[4]:
+                    post_dinner_before = st.number_input("晚餐前", step=0.1, value=None, key="post_dinner_before")
+                with cols[5]:
+                    post_dinner_after = st.number_input("晚餐后2h", step=0.1, value=None, key="post_dinner_after")
+                with cols[6]:
+                    post_bed = st.number_input("睡前", step=0.1, value=None, key="post_bed")
 
         # ========== 干预方案 ==========
         with st.expander("4️⃣ 干预方案与使用反馈", expanded=False):
