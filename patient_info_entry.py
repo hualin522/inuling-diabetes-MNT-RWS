@@ -71,19 +71,6 @@ def safe_float(val):
         return None
 
 # ============================================
-# 日期控件中文化（Streamlit ≥ 1.32.0 支持）
-# ============================================
-st_major, st_minor, st_patch = map(int, st.__version__.split('.'))
-cn_locale = (st_major, st_minor, st_patch) >= (1, 32, 0)
-
-def date_input_cn(label, value=None, min_value=None, key=None, disabled=False, **kwargs):
-    kw = dict(label=label, value=value, min_value=min_value, key=key, disabled=disabled, format="YYYY-MM-DD")
-    if cn_locale:
-        kw['locale'] = 'zh_CN'
-    kw.update(kwargs)
-    return st.date_input(**kw)
-
-# ============================================
 # 自动计算函数
 # ============================================
 def calculate_age(birth_date):
@@ -650,7 +637,7 @@ def patient_info_entry():
                 phone = st.text_input("联系电话", value=selected_patient_data.get("联系电话", "") if selected_patient_data else "")
             with col2:
                 default_birth = safe_date(selected_patient_data.get("出生日期")) if selected_patient_data else None
-                birth_date = date_input_cn("出生日期", value=default_birth, min_value=date(1900,1,1), key="birth")
+                birth_date = st.date_input("出生日期", value=default_birth, min_value=date(1900,1,1), key="birth")
                 auto_age = calculate_age(birth_date)
                 if age_mode == "自动计算":
                     age_disabled = True
@@ -663,7 +650,7 @@ def patient_info_entry():
                     age_input = auto_age
             with col3:
                 default_diag = safe_date(selected_patient_data.get("确诊日期")) if selected_patient_data else None
-                diagnosis_date = date_input_cn("确诊日期/年月日", value=default_diag, min_value=date(1900,1,1), key="diag")
+                diagnosis_date = st.date_input("确诊日期/年月日", value=default_diag, min_value=date(1900,1,1), key="diag")
                 auto_disease = calculate_disease_years(diagnosis_date)
                 if disease_mode == "自动计算":
                     disease_disabled = True
@@ -711,7 +698,7 @@ def patient_info_entry():
 
             # 干预前5点血糖
             st.markdown("##### 五点血糖")
-            pre_glyc_date = date_input_cn("检测日期", value=safe_date(selected_patient_data.get("干预前5点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_glyc_date", disabled=selected_patient_data is not None)
+            pre_glyc_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前5点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_glyc_date", disabled=selected_patient_data is not None)
             pre_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1,
                                       value=safe_float(selected_patient_data.get("干预前FPG")) if selected_patient_data else None,
                                       key="pre_fpg", disabled=selected_patient_data is not None)
@@ -736,7 +723,7 @@ def patient_info_entry():
             # 干预前体感指标
             st.markdown("##### 体感指标")
             st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
-            pre_symptom_date = date_input_cn("录入日期", value=safe_date(selected_patient_data.get("干预前体感日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="symptom_pre_date", disabled=selected_patient_data is not None)
+            pre_symptom_date = st.date_input("录入日期", value=safe_date(selected_patient_data.get("干预前体感日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="symptom_pre_date", disabled=selected_patient_data is not None)
             st.caption("如果与五点血糖检测日期相同，可不填")
             pre_scores = selected_patient_data.get("干预前体感子项", {}) if selected_patient_data else {}
             col1, col2, col3 = st.columns(3)
@@ -804,7 +791,7 @@ def patient_info_entry():
 
             # 干预前生化指标
             st.markdown("##### 生化指标")
-            pre_bio_date = date_input_cn("检测日期", value=safe_date(selected_patient_data.get("干预前生化日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_bio_date", disabled=selected_patient_data is not None)
+            pre_bio_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前生化日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_bio_date", disabled=selected_patient_data is not None)
             st.caption("如果与五点血糖检测日期相同，可不填")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -835,7 +822,7 @@ def patient_info_entry():
 
             # 干预前7点血糖
             st.markdown("##### 日常7点血糖")
-            pre_7_date = date_input_cn("检测日期", value=safe_date(selected_patient_data.get("干预前7点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_7_date", disabled=selected_patient_data is not None)
+            pre_7_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前7点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_7_date", disabled=selected_patient_data is not None)
             cols = st.columns(7)
             with cols[0]:
                 pre_bf_before = st.number_input("早餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐前")) if selected_patient_data else None, key="pre_bf_before", disabled=selected_patient_data is not None)
@@ -872,7 +859,7 @@ def patient_info_entry():
 
             # 干预后5点血糖
             st.markdown("##### 五点血糖")
-            post_glyc_date = date_input_cn("检测日期", value=None, min_value=date(1900,1,1), key="post_glyc_date")
+            post_glyc_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_glyc_date")
             post_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_fpg")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -887,7 +874,7 @@ def patient_info_entry():
             # 干预后体感指标
             st.markdown("##### 体感指标")
             st.caption("评分标准：0分为最差，10分为最好（即无该症状）")
-            post_symptom_date = date_input_cn("录入日期", value=None, min_value=date(1900,1,1), key="symptom_post_date")
+            post_symptom_date = st.date_input("录入日期", value=None, min_value=date(1900,1,1), key="symptom_post_date")
             st.caption("如果与五点血糖检测日期相同，可不填")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -941,7 +928,7 @@ def patient_info_entry():
 
             # 干预后生化指标
             st.markdown("##### 生化指标")
-            post_bio_date = date_input_cn("检测日期", value=None, min_value=date(1900,1,1), key="post_bio_date")
+            post_bio_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_bio_date")
             st.caption("如果与五点血糖检测日期相同，可不填")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -958,7 +945,7 @@ def patient_info_entry():
 
             # 干预后7点血糖
             st.markdown("##### 日常7点血糖")
-            post_7_date = date_input_cn("检测日期", value=None, min_value=date(1900,1,1), key="post_7_date")
+            post_7_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_7_date")
             cols = st.columns(7)
             with cols[0]:
                 post_bf_before = st.number_input("早餐前", step=0.1, value=None, key="post_bf_before")
@@ -991,10 +978,10 @@ def patient_info_entry():
         with st.expander("5️⃣ 用药调整情况", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                drug_pre_date = date_input_cn("干预前日期", value=safe_date(selected_patient_data.get("用药调整干预前日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="drug_pre_date", disabled=selected_patient_data is not None)
+                drug_pre_date = st.date_input("干预前日期", value=safe_date(selected_patient_data.get("用药调整干预前日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="drug_pre_date", disabled=selected_patient_data is not None)
                 drug_pre_med = st.text_area("干预前用药 (可简述)", value=selected_patient_data.get("用药调整干预前用药", "") if selected_patient_data else "", key="drug_pre_med", disabled=selected_patient_data is not None)
             with col2:
-                drug_post_date = date_input_cn("干预后日期", value=None, min_value=date(1900,1,1), key="drug_post_date")
+                drug_post_date = st.date_input("干预后日期", value=None, min_value=date(1900,1,1), key="drug_post_date")
                 drug_post_med = st.text_area("干预后用药 (可简述)", key="drug_post_med")
             drug_reduction = st.selectbox("减药/停药", ["无变化", "减剂量", "减种类", "停用所有口服", "其他"], key="drug_reduction")
 
