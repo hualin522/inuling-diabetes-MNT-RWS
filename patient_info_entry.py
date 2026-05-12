@@ -1229,6 +1229,11 @@ def patient_info_entry():
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
             st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
+    
+    if st.button("🔄 重建知识库（更新 PDF 后使用）"):
+    load_knowledge_base.clear()   # 清除缓存
+    st.cache_resource.clear()     # 清除所有资源缓存（可选，更彻底）
+    st.rerun()
 
     # ===== 患者列表与血糖曲线 =====
     st.subheader("📋 已录入患者列表")
