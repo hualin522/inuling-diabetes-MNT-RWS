@@ -967,29 +967,37 @@ def patient_info_entry():
             with st.expander("生化指标", expanded=False):
                 pre_bio_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前生化日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_bio_date", disabled=selected_patient_data is not None)
                 st.caption("如果与五点血糖检测日期相同，可不填")
-                col1, col2, col3, col4 = st.columns(4)
+                # 第一行：糖化/%  TG
+                col1, col2 = st.columns(2)
                 with col1:
                     pre_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1,
                                                 value=safe_float(selected_patient_data.get("干预前糖化")) if selected_patient_data else None,
                                                 key="pre_hba1c", disabled=selected_patient_data is not None)
-                    pre_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1,
-                                            value=safe_float(selected_patient_data.get("干预前TC")) if selected_patient_data else None,
-                                            key="pre_tc", disabled=selected_patient_data is not None)
                 with col2:
                     pre_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前TG")) if selected_patient_data else None,
                                             key="pre_tg", disabled=selected_patient_data is not None)
+                # 第二行：TC  LDL  HDL（三列）
+                col3, col4, col5 = st.columns(3)
+                with col3:
+                    pre_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1,
+                                            value=safe_float(selected_patient_data.get("干预前TC")) if selected_patient_data else None,
+                                            key="pre_tc", disabled=selected_patient_data is not None)
+                with col4:
                     pre_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前LDL")) if selected_patient_data else None,
                                             key="pre_ldl", disabled=selected_patient_data is not None)
-                with col3:
+                with col5:
                     pre_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前HDL")) if selected_patient_data else None,
                                             key="pre_hdl", disabled=selected_patient_data is not None)
+                # 第三行：ALT  AST
+                col6, col7 = st.columns(2)
+                with col6:
                     pre_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0,
                                             value=safe_float(selected_patient_data.get("干预前ALT")) if selected_patient_data else None,
                                             key="pre_alt", disabled=selected_patient_data is not None)
-                with col4:
+                with col7:
                     pre_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0,
                                             value=safe_float(selected_patient_data.get("干预前AST")) if selected_patient_data else None,
                                             key="pre_ast", disabled=selected_patient_data is not None)
@@ -1110,17 +1118,25 @@ def patient_info_entry():
             with st.expander("生化指标", expanded=False):
                 post_bio_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_bio_date")
                 st.caption("如果与五点血糖检测日期相同，可不填")
-                col1, col2, col3, col4 = st.columns(4)
+                # 第一行：糖化/%  TG
+                col1, col2 = st.columns(2)
                 with col1:
                     post_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1, value=None, key="post_hba1c")
-                    post_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
                 with col2:
                     post_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tg")
-                    post_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_ldl")
+                # 第二行：TC  LDL  HDL（三列）
+                col3, col4, col5 = st.columns(3)
                 with col3:
-                    post_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_hdl")
-                    post_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0, value=None, key="post_alt")
+                    post_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
                 with col4:
+                    post_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_ldl")
+                with col5:
+                    post_hdl = st.number_input("HDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_hdl")
+                # 第三行：ALT  AST
+                col6, col7 = st.columns(2)
+                with col6:
+                    post_alt = st.number_input("ALT (U/L)", min_value=0.0, step=1.0, value=None, key="post_alt")
+                with col7:
                     post_ast = st.number_input("AST (U/L)", min_value=0.0, step=1.0, value=None, key="post_ast")
 
                 # 干预后7点血糖
