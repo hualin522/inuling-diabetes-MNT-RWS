@@ -873,7 +873,8 @@ def patient_info_entry():
                 pre_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1,
                                         value=safe_float(selected_patient_data.get("干预前FPG")) if selected_patient_data else None,
                                         key="pre_fpg", disabled=selected_patient_data is not None)
-                col1, col2, col3, col4 = st.columns(4)
+                # 第一行：PG30 和 PG60
+                col1, col2 = st.columns(2)
                 with col1:
                     pre_pg30 = st.number_input("PG 30min (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前PG30")) if selected_patient_data else None,
@@ -882,6 +883,8 @@ def patient_info_entry():
                     pre_pg60 = st.number_input("PG 60min (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前PG60")) if selected_patient_data else None,
                                             key="pre_pg60", disabled=selected_patient_data is not None)
+                # 第二行：PG120 和 PG180
+                col3, col4 = st.columns(2)
                 with col3:
                     pre_pg120 = st.number_input("PG 120min (mmol/L)", min_value=0.0, step=0.1,
                                                 value=safe_float(selected_patient_data.get("干预前PG120")) if selected_patient_data else None,
@@ -1032,11 +1035,12 @@ def patient_info_entry():
             with st.expander("5点血糖", expanded=False):
                 post_glyc_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_glyc_date")
                 post_fpg = st.number_input("FPG 空腹血糖 (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_fpg")
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2 = st.columns(2)
                 with col1:
                     post_pg30 = st.number_input("PG 30min", min_value=0.0, step=0.1, value=None, key="post_30")
                 with col2:
                     post_pg60 = st.number_input("PG 60min", min_value=0.0, step=0.1, value=None, key="post_60")
+                col3, col4 = st.columns(2)
                 with col3:
                     post_pg120 = st.number_input("PG 120min", min_value=0.0, step=0.1, value=None, key="post_120")
                 with col4:
