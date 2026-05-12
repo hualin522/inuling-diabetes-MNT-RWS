@@ -997,21 +997,26 @@ def patient_info_entry():
                 # 干预前7点血糖
             with st.expander("日常7点血糖", expanded=False):
                 pre_7_date = st.date_input("检测日期", value=safe_date(selected_patient_data.get("干预前7点日期")) if selected_patient_data else None, min_value=date(1900,1,1), key="pre_7_date", disabled=selected_patient_data is not None)
-                cols = st.columns(7)
-                with cols[0]:
+                # 早餐前后
+                col_a, col_b = st.columns(2)
+                with col_a:
                     pre_bf_before = st.number_input("早餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐前")) if selected_patient_data else None, key="pre_bf_before", disabled=selected_patient_data is not None)
-                with cols[1]:
+                with col_b:
                     pre_bf_after = st.number_input("早餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前早餐后2h")) if selected_patient_data else None, key="pre_bf_after", disabled=selected_patient_data is not None)
-                with cols[2]:
+                # 午餐前后
+                col_c, col_d = st.columns(2)
+                with col_c:
                     pre_lunch_before = st.number_input("午餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐前")) if selected_patient_data else None, key="pre_lunch_before", disabled=selected_patient_data is not None)
-                with cols[3]:
+                with col_d:
                     pre_lunch_after = st.number_input("午餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前午餐后2h")) if selected_patient_data else None, key="pre_lunch_after", disabled=selected_patient_data is not None)
-                with cols[4]:
+                # 晚餐前后
+                col_e, col_f = st.columns(2)
+                with col_e:
                     pre_dinner_before = st.number_input("晚餐前", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐前")) if selected_patient_data else None, key="pre_dinner_before", disabled=selected_patient_data is not None)
-                with cols[5]:
+                with col_f:
                     pre_dinner_after = st.number_input("晚餐后2h", step=0.1, value=safe_float(selected_patient_data.get("干预前晚餐后2h")) if selected_patient_data else None, key="pre_dinner_after", disabled=selected_patient_data is not None)
-                with cols[6]:
-                    pre_bed = st.number_input("睡前", step=0.1, value=safe_float(selected_patient_data.get("干预前睡前")) if selected_patient_data else None, key="pre_bed", disabled=selected_patient_data is not None)
+                # 睡前
+                pre_bed = st.number_input("睡前", step=0.1, value=safe_float(selected_patient_data.get("干预前睡前")) if selected_patient_data else None, key="pre_bed", disabled=selected_patient_data is not None)
 
         # ========== 干预后数据（大板块） ==========
         with st.expander("3️⃣ 干预后数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
@@ -1121,21 +1126,26 @@ def patient_info_entry():
                 # 干预后7点血糖
             with st.expander("日常7点血糖", expanded=False):
                 post_7_date = st.date_input("检测日期", value=None, min_value=date(1900,1,1), key="post_7_date")
-                cols = st.columns(7)
-                with cols[0]:
+                # 早餐前后
+                col_a, col_b = st.columns(2)
+                with col_a:
                     post_bf_before = st.number_input("早餐前", step=0.1, value=None, key="post_bf_before")
-                with cols[1]:
+                with col_b:
                     post_bf_after = st.number_input("早餐后2h", step=0.1, value=None, key="post_bf_after")
-                with cols[2]:
+                # 午餐前后
+                col_c, col_d = st.columns(2)
+                with col_c:
                     post_lunch_before = st.number_input("午餐前", step=0.1, value=None, key="post_lunch_before")
-                with cols[3]:
+                with col_d:
                     post_lunch_after = st.number_input("午餐后2h", step=0.1, value=None, key="post_lunch_after")
-                with cols[4]:
+                # 晚餐前后
+                col_e, col_f = st.columns(2)
+                with col_e:
                     post_dinner_before = st.number_input("晚餐前", step=0.1, value=None, key="post_dinner_before")
-                with cols[5]:
+                with col_f:
                     post_dinner_after = st.number_input("晚餐后2h", step=0.1, value=None, key="post_dinner_after")
-                with cols[6]:
-                    post_bed = st.number_input("睡前", step=0.1, value=None, key="post_bed")
+                # 睡前
+                post_bed = st.number_input("睡前", step=0.1, value=None, key="post_bed")
 
         # ========== 干预方案 ==========
         with st.expander("4️⃣ 干预方案与使用反馈", expanded=False):
