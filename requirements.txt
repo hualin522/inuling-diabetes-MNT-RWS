@@ -15,3 +15,4 @@ sentence-transformers
 faiss-cpu
 pypdf
 torchvision
+pyzipper
