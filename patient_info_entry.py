@@ -368,6 +368,12 @@ def load_patients_from_sheets(submitter_id=None):
                     for f in new_followups:
                         if f.get("随访时间") not in existing_times:
                             existing_followups.append(f)
+            # 恢复干预前体感子项字典（如果存储为 JSON 字符串）
+            if "干预前体感子项" in row and isinstance(row["干预前体感子项"], str):
+                try:
+                    row["干预前体感子项"] = json.loads(row["干预前体感子项"])
+                except:
+                    row["干预前体感子项"] = {}
         all_data = list(patient_map.values())
         return all_data
     except Exception as e:
@@ -1235,6 +1241,9 @@ def patient_info_entry():
             else:
                 for k in ["最新随访FPG", "最新随访PG30", "最新随访PG60", "最新随访PG120", "最新随访PG180"]:
                     save_data[k] = ""
+            # 将干预前体感子项转为 JSON 字符串，避免被 flatten_dict 展开
+            if "干预前体感子项" in save_data and isinstance(save_data["干预前体感子项"], dict):
+                save_data["干预前体感子项"] = json.dumps(save_data["干预前体感子项"], ensure_ascii=False)
             if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
                 save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
