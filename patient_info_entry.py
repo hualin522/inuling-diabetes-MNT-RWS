@@ -299,8 +299,11 @@ def load_patients_from_sheets(submitter_id=None):
         all_data = sheet.get_all_records()
         if not all_data:
             return []
+
         if submitter_id:
             all_data = [row for row in all_data if str(row.get("提交者ID", "")) == str(submitter_id)]
+
+        # 日期、数值字段列表（与之前相同）
         date_fields = [
             "出生日期", "确诊日期", "干预前体感日期", "干预后体感日期",
             "干预前生化日期", "干预后生化日期", "干预前5点日期", "干预后5点日期",
@@ -323,18 +326,42 @@ def load_patients_from_sheets(submitter_id=None):
             "干预前晚餐前", "干预前晚餐后2h", "干预前睡前",
             "干预后早餐前", "干预后早餐后2h", "干预后午餐前", "干预后午餐后2h",
             "干预后晚餐前", "干预后晚餐后2h", "干预后睡前",
+            "年龄", "病史年"           # 这两项也可能是数字
         ]
+        symptom_items = [
+            "口臭", "排便情况", "胃肠道", "四肢麻木", "皮肤瘙痒", "睡眠",
+            "视物", "乏力", "多饮", "多食", "多尿", "腰膝酸软", "盗汗情况", "情绪状况"
+        ]
+
         filtered_data = []
         for row in all_data:
-            # 跳过无有效提交者ID的行
             if not row.get("提交者ID"):
                 continue
-            for df in date_fields:
-                if df in row:
-                    row[df] = safe_date(row[df])
+
+            # 数值转换（对所有数值字段使用 safe_float）
             for nf in numeric_fields:
                 if nf in row:
                     row[nf] = safe_float(row[nf])
+            # 日期转换
+            for df in date_fields:
+                if df in row:
+                    row[df] = safe_date(row[df])
+
+            # 体感子项还原：优先 JSON，其次展平列重建
+            if "干预前体感子项" in row and isinstance(row["干预前体感子项"], str):
+                try:
+                    row["干预前体感子项"] = json.loads(row["干预前体感子项"])
+                except:
+                    row["干预前体感子项"] = {}
+            if not isinstance(row.get("干预前体感子项"), dict):
+                rebuilt = {}
+                for item in symptom_items:
+                    flat_key = f"干预前体感子项_{item}"
+                    if flat_key in row:
+                        rebuilt[item] = safe_float(row[flat_key])
+                row["干预前体感子项"] = rebuilt if rebuilt else {}
+
+            # 随访记录处理
             if "随访记录" in row and isinstance(row["随访记录"], str):
                 try:
                     row["随访记录"] = json.loads(row["随访记录"])
@@ -348,13 +375,13 @@ def load_patients_from_sheets(submitter_id=None):
                     for nf in numeric_fields:
                         if nf in record:
                             record[nf] = safe_float(record[nf])
+
             filtered_data.append(row)
-        # 合并同一 (提交者ID, 患者姓名) 的多行记录
+
+        # 合并同一 (提交者ID, 患者姓名) 的行
         patient_map = {}
         for row in filtered_data:
-            sid = str(row.get("提交者ID", ""))
-            name = str(row.get("患者姓名", ""))
-            key = (sid, name)
+            key = (str(row.get("提交者ID", "")), str(row.get("患者姓名", "")))
             if key not in patient_map:
                 patient_map[key] = row.copy()
                 if not isinstance(patient_map[key].get("随访记录"), list):
@@ -368,14 +395,8 @@ def load_patients_from_sheets(submitter_id=None):
                     for f in new_followups:
                         if f.get("随访时间") not in existing_times:
                             existing_followups.append(f)
-            # 恢复干预前体感子项字典（如果存储为 JSON 字符串）
-            if "干预前体感子项" in row and isinstance(row["干预前体感子项"], str):
-                try:
-                    row["干预前体感子项"] = json.loads(row["干预前体感子项"])
-                except:
-                    row["干预前体感子项"] = {}
-        all_data = list(patient_map.values())
-        return all_data
+        return list(patient_map.values())
+
     except Exception as e:
         st.error(f"从 Google Sheets 加载数据失败：{e}")
         return []
