@@ -713,7 +713,7 @@ def generate_plan(patient_combined_data: dict) -> str:
 # 主界面
 # ============================================
 def patient_info_entry():
-    st.header("📋 英纽林糖尿病营养治疗真实世界研究案例收集")
+    st.header("📋 《英纽林糖尿病医学营养治疗真实世界研究》案例收集")
 
     query_params = st.query_params
     submitter_id = query_params.get("submitter_id", None)
@@ -783,9 +783,9 @@ def patient_info_entry():
 
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
                 # ========== 知情同意声明 ==========
-        with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=False):
+        with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=True):
             st.markdown("""
-            **英纽林糖尿病营养治疗真实世界研究案例收集项目**
+            **《英纽林糖尿病医学营养治疗真实世界研究》案例收集项目**
 
             尊敬的参与者：
 
