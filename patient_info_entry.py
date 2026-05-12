@@ -782,6 +782,23 @@ def patient_info_entry():
         st.session_state.disease_manual = 0.0
 
     with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
+                # ========== 知情同意声明 ==========
+        with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=False):
+            st.markdown("""
+            **英纽林糖尿病营养治疗真实世界研究案例收集项目**
+
+            尊敬的参与者：
+
+            本研究旨在收集真实世界中接受英纽林系列营养产品干预的糖尿病患者案例，用于学术分析和产品优化。  
+            所有收集的数据将严格**匿名化处理**，仅用于统计分析，**不会泄露任何个人隐私信息**。
+
+            - 参与本研究完全**自愿**，您可以随时退出，不会影响您获得正常的医疗服务。
+            - 数据提交后，研究团队将妥善保管，并仅用于与糖尿病营养治疗相关的科研用途。
+            - 如有任何疑问，请联系您的主治医生或研究团队。
+
+            点击下方的复选框，即表示您已**阅读并理解**上述内容，同意将个案数据用于本研究。
+            """)
+            consent_given = st.checkbox("我已阅读并同意知情同意书", key="consent_checkbox")
         # 1. 用户基本信息
         with st.expander("1️⃣ 用户基本信息", expanded=True):
             col1, col2, col3, col4 = st.columns(4)
@@ -1158,6 +1175,11 @@ def patient_info_entry():
             if not name:
                 st.error("患者姓名不能为空")
                 st.stop()
+            
+            # 新增：检查知情同意
+            if not consent_given:
+                st.error("❌ 请先阅读并勾选知情同意书，否则无法提交数据。")
+                st.stop()
 
             # 异常值预警
             check_dict = {
@@ -1476,21 +1498,33 @@ def patient_info_entry():
                 items = list(pre_symptom.keys())
                 pre_vals = [pre_symptom.get(item) for item in items]
                 
-                pre_symptom_date = patient.get("干预前体感日期")
+                # 干预前日期：优先体感日期，否则回退到五点血糖日期
+                pre_date = patient.get("干预前体感日期") or patient.get("干预前5点日期")
                 pre_label = "干预前"
-                if pre_symptom_date:
-                    pre_label += f" ({pre_symptom_date.isoformat()})"
+                if pre_date:
+                    pre_label += f" ({pre_date.isoformat()})"
 
                 fig = go.Figure()
                 fig.add_trace(go.Bar(name=pre_label, x=items, y=pre_vals, marker_color="blue"))
+
                 colors_bar = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive']
                 valid_followups = [f for f in patient.get("随访记录", []) if f.get("干预后体感子项")]
                 for idx, rec in enumerate(valid_followups):
                     post_symptom = rec.get("干预后体感子项", {})
                     post_vals = [post_symptom.get(item) for item in items]
                     color = colors_bar[idx % len(colors_bar)]
-                    followup_label = f"随访{idx+1} ({rec.get('随访时间', '')})"
+                    
+                    # 随访标签日期：优先随访时间，其次干预后体感日期，再其次干预后5点日期
+                    fu_date = rec.get("随访时间") or rec.get("干预后体感日期") or rec.get("干预后5点日期")
+                    if isinstance(fu_date, date):
+                        fu_date_str = fu_date.isoformat()
+                    elif fu_date:
+                        fu_date_str = str(fu_date)
+                    else:
+                        fu_date_str = ""
+                    followup_label = f"随访{idx+1} ({fu_date_str})" if fu_date_str else f"随访{idx+1}"
                     fig.add_trace(go.Bar(name=followup_label, x=items, y=post_vals, marker_color=color))
+
                 fig.update_layout(
                     title=f"{selected_patient_name} - 体感评分对比",
                     xaxis_title="体感项目",
@@ -1515,19 +1549,28 @@ def patient_info_entry():
             ]
             followups_list = patient.get("随访记录", [])
 
-            pre_bio_date = patient.get("干预前生化日期")
+            # 干预前生化日期：优先生化日期，否则回退到五点血糖日期
+            pre_bio_date = patient.get("干预前生化日期") or patient.get("干预前5点日期")
             pre_bio_label = "干预前"
             if pre_bio_date:
                 pre_bio_label += f" ({pre_bio_date.isoformat()})"
 
-            timepoints = [pre_bio_label] + [f"随访{i+1}\n({r.get('随访时间', '')[:10]})" for i, r in enumerate(followups_list)]
+            # 构建时间点标签（含回退日期）
+            timepoints = [pre_bio_label]
+            for i, r in enumerate(followups_list):
+                fu_date = r.get("随访时间") or r.get("干预后生化日期") or r.get("干预后5点日期")
+                if isinstance(fu_date, date):
+                    fu_date_str = fu_date.isoformat()
+                elif fu_date:
+                    fu_date_str = str(fu_date)
+                else:
+                    fu_date_str = ""
+                label = f"随访{i+1}\n({fu_date_str[:10]})" if fu_date_str else f"随访{i+1}"
+                timepoints.append(label)
 
             for field_name, pre_key, post_key, unit in bio_fields:
                 pre_val = patient.get(pre_key)
-                post_vals = []
-                for rec in followups_list:
-                    val = rec.get(post_key)
-                    post_vals.append(val)
+                post_vals = [rec.get(post_key) for rec in followups_list]
                 all_vals = [pre_val] + post_vals
                 if all(v is None for v in all_vals):
                     continue
