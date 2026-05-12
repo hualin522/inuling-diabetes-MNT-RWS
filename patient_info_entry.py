@@ -1383,103 +1383,87 @@ def patient_info_entry():
     #    st.cache_resource.clear()     # 清除所有资源缓存（可选，更彻底）
     #    st.rerun()
 
-    # ===== 患者列表与血糖曲线 =====
-    st.subheader("📋 已录入患者列表")
-    if is_admin:
-        display_patients = st.session_state.patients
-    else:
-        display_patients = [p for p in st.session_state.patients if p.get("提交者ID") == submitter_id]
-    if not display_patients:
-        st.info("暂无数据")
-    else:
-        df_list = []
-        for p in display_patients:
-            followups = p.get("随访记录", [])
-            n_fu = len(followups) if isinstance(followups, list) else 0
-            last_fu = followups[-1]["随访时间"] if isinstance(followups, list) and n_fu > 0 else ""
-            df_list.append({"患者姓名": p["患者姓名"], "性别": p.get("性别"), "年龄": p.get("年龄"), "随访次数": n_fu, "最近随访": last_fu})
-        df_display = pd.DataFrame(df_list)
-        st.dataframe(df_display, use_container_width=True)
+    # ===== 图表分析（基于当前选中的患者） =====
+    if selected_patient_data:
+        patient = selected_patient_data
+        selected_patient_name = patient.get("患者姓名", "未知")
 
         st.subheader("📈 血糖曲线分析")
-        if len(display_patients) > 0:
-            selected_patient_name = st.selectbox("选择患者", [p["患者姓名"] for p in display_patients], key="glucose_analysis")
-            patient = next(p for p in display_patients if p["患者姓名"] == selected_patient_name)
-            display_mode = st.radio("展示模式", ["单次随访对比", "全部随访展示"], horizontal=True, key="glucose_display_mode")
-            pre_values = [patient.get("干预前FPG"), patient.get("干预前PG30"),
-                          patient.get("干预前PG60"), patient.get("干预前PG120"),
-                          patient.get("干预前PG180")]
-            followups = patient.get("随访记录", [])
-            pre_date_str = ""
-            if patient.get("干预前5点日期"):
-                pre_date_str = f" ({patient['干预前5点日期'].isoformat()})"
+        display_mode = st.radio("展示模式", ["单次随访对比", "全部随访展示"], horizontal=True, key="glucose_display_mode")
+        pre_values = [patient.get("干预前FPG"), patient.get("干预前PG30"),
+                      patient.get("干预前PG60"), patient.get("干预前PG120"),
+                      patient.get("干预前PG180")]
+        followups = patient.get("随访记录", [])
+        pre_date_str = ""
+        if patient.get("干预前5点日期"):
+            pre_date_str = f" ({patient['干预前5点日期'].isoformat()})"
 
-            if display_mode == "单次随访对比":
-                followup_options = ["未选择"] + [f"第{i+1}次随访 ({r.get('随访时间', '')})" for i, r in enumerate(followups)]
-                selected_followup_idx = st.selectbox("选择随访记录", range(len(followup_options)),
-                                                     format_func=lambda x: followup_options[x], key="single_followup")
-                if selected_followup_idx == 0:
-                    if all(pre_values):
-                        fig, auc = plot_glucose_curve(pre_values, f"干预前血糖曲线{pre_date_str}")
-                        if fig:
-                            st.plotly_chart(fig, use_container_width=True)
-                            st.metric("AUC (mmol/L·h)", auc)
-                    else:
-                        st.info("无干预前5点血糖数据")
-                else:
-                    record = followups[selected_followup_idx - 1]
-                    post_values = [record.get("干预后FPG"), record.get("干预后PG30"),
-                                   record.get("干预后PG60"), record.get("干预后PG120"),
-                                   record.get("干预后PG180")]
-                    fig, pre_auc, post_auc = plot_combined_glucose_curve(pre_values, post_values,
-                                                                         f"{selected_patient_name} - 干预前后对比")
+        if display_mode == "单次随访对比":
+            followup_options = ["未选择"] + [f"第{i+1}次随访 ({r.get('随访时间', '')})" for i, r in enumerate(followups)]
+            selected_followup_idx = st.selectbox("选择随访记录", range(len(followup_options)),
+                                                 format_func=lambda x: followup_options[x], key="single_followup")
+            if selected_followup_idx == 0:
+                if all(pre_values):
+                    fig, auc = plot_glucose_curve(pre_values, f"干预前血糖曲线{pre_date_str}")
                     if fig:
                         st.plotly_chart(fig, use_container_width=True)
-                        col1, col2 = st.columns(2)
-                        with col1: st.metric("干预前 AUC", pre_auc)
-                        with col2: st.metric("干预后 AUC", post_auc)
-                    else:
-                        st.info("该次随访数据不完整，无法绘图")
-            else:
-                valid_followups = []
-                for i, rec in enumerate(followups):
-                    post_vals = [rec.get("干预后FPG"), rec.get("干预后PG30"),
-                                 rec.get("干预后PG60"), rec.get("干预后PG120"),
-                                 rec.get("干预后PG180")]
-                    if all(post_vals):
-                        valid_followups.append((i, rec, post_vals))
-                if not valid_followups and not all(pre_values):
-                    st.info("暂无完整的五点血糖数据")
+                        st.metric("AUC (mmol/L·h)", auc)
                 else:
-                    fig = go.Figure()
-                    times = [0, 0.5, 1, 2, 3]
-                    if all(pre_values):
-                        fig.add_trace(go.Scatter(x=times, y=pre_values, mode='lines+markers',
-                                                 name=f'干预前{pre_date_str}', line=dict(color='blue', width=3)))
-                    colors = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive']
-                    for idx, (i, rec, post_vals) in enumerate(valid_followups):
-                        color = colors[idx % len(colors)]
-                        followup_date = rec.get("随访时间", f"第{i+1}次")
-                        fig.add_trace(go.Scatter(x=times, y=post_vals, mode='lines+markers',
-                                                 name=f'随访{idx+1} ({followup_date})',
-                                                 line=dict(color=color)))
-                    fig.update_layout(title=f"{selected_patient_name} - 多点血糖对比",
-                                      xaxis_title='时间 (小时)', yaxis_title='血糖 (mmol/L)',
-                                      xaxis=dict(tickmode='array', tickvals=times,
-                                                 ticktext=['空腹','0.5h','1h','2h','3h']))
+                    st.info("无干预前5点血糖数据")
+            else:
+                record = followups[selected_followup_idx - 1]
+                post_values = [record.get("干预后FPG"), record.get("干预后PG30"),
+                               record.get("干预后PG60"), record.get("干预后PG120"),
+                               record.get("干预后PG180")]
+                fig, pre_auc, post_auc = plot_combined_glucose_curve(pre_values, post_values,
+                                                                     f"{selected_patient_name} - 干预前后对比")
+                if fig:
                     st.plotly_chart(fig, use_container_width=True)
+                    col1, col2 = st.columns(2)
+                    with col1: st.metric("干预前 AUC", pre_auc)
+                    with col2: st.metric("干预后 AUC", post_auc)
+                else:
+                    st.info("该次随访数据不完整，无法绘图")
+        else:
+            valid_followups = []
+            for i, rec in enumerate(followups):
+                post_vals = [rec.get("干预后FPG"), rec.get("干预后PG30"),
+                             rec.get("干预后PG60"), rec.get("干预后PG120"),
+                             rec.get("干预后PG180")]
+                if all(post_vals):
+                    valid_followups.append((i, rec, post_vals))
+            if not valid_followups and not all(pre_values):
+                st.info("暂无完整的五点血糖数据")
+            else:
+                fig = go.Figure()
+                times = [0, 0.5, 1, 2, 3]
+                if all(pre_values):
+                    fig.add_trace(go.Scatter(x=times, y=pre_values, mode='lines+markers',
+                                             name=f'干预前{pre_date_str}', line=dict(color='blue', width=3)))
+                colors = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive']
+                for idx, (i, rec, post_vals) in enumerate(valid_followups):
+                    color = colors[idx % len(colors)]
+                    followup_date = rec.get("随访时间", f"第{i+1}次")
+                    fig.add_trace(go.Scatter(x=times, y=post_vals, mode='lines+markers',
+                                             name=f'随访{idx+1} ({followup_date})',
+                                             line=dict(color=color)))
+                fig.update_layout(title=f"{selected_patient_name} - 多点血糖对比",
+                                  xaxis_title='时间 (小时)', yaxis_title='血糖 (mmol/L)',
+                                  xaxis=dict(tickmode='array', tickvals=times,
+                                             ticktext=['空腹','0.5h','1h','2h','3h']))
+                st.plotly_chart(fig, use_container_width=True)
 
-                    def compute_auc(vals):
-                        auc = 0
-                        for j in range(len(times)-1):
-                            auc += (vals[j] + vals[j+1]) / 2 * (times[j+1] - times[j])
-                        return round(auc, 2)
-                    auc_data = []
-                    if all(pre_values):
-                        auc_data.append({"记录": "干预前", "AUC": compute_auc(pre_values)})
-                    for i, rec, post_vals in valid_followups:
-                        auc_data.append({"记录": f"随访{i+1}", "AUC": compute_auc(post_vals)})
-                    st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
+                def compute_auc(vals):
+                    auc = 0
+                    for j in range(len(times)-1):
+                        auc += (vals[j] + vals[j+1]) / 2 * (times[j+1] - times[j])
+                    return round(auc, 2)
+                auc_data = []
+                if all(pre_values):
+                    auc_data.append({"记录": "干预前", "AUC": compute_auc(pre_values)})
+                for i, rec, post_vals in valid_followups:
+                    auc_data.append({"记录": f"随访{i+1}", "AUC": compute_auc(post_vals)})
+                st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
 
         # ===== 体感评分对比（可选） =====
         show_symptom = st.checkbox("📊 显示单项体感评分对比", value=False)
@@ -1492,7 +1476,6 @@ def patient_info_entry():
                 items = list(pre_symptom.keys())
                 pre_vals = [pre_symptom.get(item) for item in items]
                 
-                # 干预前日期处理
                 pre_symptom_date = patient.get("干预前体感日期")
                 pre_label = "干预前"
                 if pre_symptom_date:
@@ -1500,7 +1483,6 @@ def patient_info_entry():
 
                 fig = go.Figure()
                 fig.add_trace(go.Bar(name=pre_label, x=items, y=pre_vals, marker_color="blue"))
-
                 colors_bar = ['red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive']
                 valid_followups = [f for f in patient.get("随访记录", []) if f.get("干预后体感子项")]
                 for idx, rec in enumerate(valid_followups):
@@ -1509,7 +1491,6 @@ def patient_info_entry():
                     color = colors_bar[idx % len(colors_bar)]
                     followup_label = f"随访{idx+1} ({rec.get('随访时间', '')})"
                     fig.add_trace(go.Bar(name=followup_label, x=items, y=post_vals, marker_color=color))
-
                 fig.update_layout(
                     title=f"{selected_patient_name} - 体感评分对比",
                     xaxis_title="体感项目",
@@ -1534,7 +1515,6 @@ def patient_info_entry():
             ]
             followups_list = patient.get("随访记录", [])
 
-            # 干预前生化日期处理
             pre_bio_date = patient.get("干预前生化日期")
             pre_bio_label = "干预前"
             if pre_bio_date:
@@ -1554,13 +1534,16 @@ def patient_info_entry():
                 x_indices = list(range(len(timepoints)))
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(x=x_indices, y=all_vals, mode='lines+markers',
-                                        name=field_name, line=dict(color='royalblue')))
+                                         name=field_name, line=dict(color='royalblue')))
                 fig.update_layout(
                     title=f"{selected_patient_name} - {field_name}",
                     xaxis=dict(tickmode='array', tickvals=x_indices, ticktext=timepoints),
                     yaxis_title=unit,
                 )
                 st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("👆 请在上方选择或新增一位患者，即可查看图表分析")
 
 if __name__ == "__main__":
     patient_info_entry()
