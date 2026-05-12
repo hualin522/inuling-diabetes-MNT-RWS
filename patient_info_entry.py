@@ -423,19 +423,19 @@ BMI：{pre_bmi}
 
 请按照以下五部分输出：
 
-### 1. 患者糖尿病病情分析
+1. 患者糖尿病病情分析
 （根据上述指标，评估患者当前糖尿病严重程度、代谢综合征风险、可能并发症等，如果有相应的体感评分则分析患者的主观不适状况，语气专业温和。）
 
-### 2. 英纽林营养产品应用方案
-（针对该患者的血糖情况和体感状况，结合本地文档中英纽林各种产品的说明书和诊疗方案，推荐适合该患者的产品、剂量、服用时间、周期。如果患者已选择了某种产品组合，请基于该组合给出具体的服用方案。对产品功效说明时，应严格按照产品说明书中提到的主要功能成分展开。）
+2. 英纽林营养产品应用方案
+（针对该患者的血糖情况和体感状况，结合本地文档中英纽林产品（重点是畅快、纽畅、纽畅B）的说明书和诊疗方案，推荐适合该患者的产品、剂量、服用时间、周期。如果患者已选择了某种产品组合，请基于该组合给出具体的服用方案。对产品功效说明时，应严格按照产品说明书中提到的主要功能成分展开。）
 
-### 3. 日常饮食、中医干预和运动管理建议
+3. 日常饮食、中医干预和运动管理建议
 （给出具体、可操作的饮食原则与食谱建议；针对患者的体感症状，推荐适合的符合国家要求的药食同源类中药；并给出适合患者的运动类型、频率、强度建议。并与营养方案配合。）
 
-### 4. 干预效果预期分析
+4. 干预效果预期分析
 （科学预估在规范使用产品并配合生活调整后，3~6个月内各项指标可能的改善幅度，如血糖、体重、糖化等。）
 
-### 5. 总结
+5. 总结
 （用一段鼓励的话语总结整体方案，强调坚持的重要性，表达积极预期。）
 """
     else:
@@ -481,8 +481,11 @@ BMI：{post_bmi}
 
 请以热情、鼓励的口吻输出以下两部分：
 
-### 1. 糖尿病改善情况分析
-### 2. 下一阶段营养干预建议
+1. 糖尿病改善情况分析
+（对比干预前后的关键指标及体感变化，用通俗易懂的语言解释哪些方面有明显改善，哪些还需要继续努力。哪怕指标仅微小改善，也要用“已经迈出重要一步”“身体正在向好的方向调整”等语言给予充分肯定。如果患者已选择了某种产品组合，请基于该组合推荐合适的具体应用方案，如果出现某些暂时的不良反应，请科学解释并安抚，强调这是向好的过渡现象。）
+
+2. 下一阶段营养干预建议
+（结合本地文档和当前改善程度，以及使用反馈中提到的状况，推荐下一阶段的产品使用调整（例如是否需要更换种类、调整剂量、配合其他辅助措施等）。同时给出饮食、药食同源中药和运动方面的优化建议，帮助患者朝着更好的方向前进。）
 """
     prompt = ChatPromptTemplate.from_template(template)
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
@@ -498,14 +501,29 @@ def generate_plan(patient_combined_data: dict) -> str:
     vectordb = load_knowledge_base()
     if vectordb is None:
         return "❌ 知识库未加载，请检查 PDF 文件"
-    has_post = any([
-        patient_combined_data.get("干预后FPG"),
-        patient_combined_data.get("干预后PG120"),
-        patient_combined_data.get("干预后糖化"),
-        patient_combined_data.get("干预后体重")
-    ])
+
+    # 判断是否有干预后数据：优先检查随访记录，其次检查顶层字段
+    has_post = False
+    followups = patient_combined_data.get("随访记录", [])
+    if isinstance(followups, list) and followups:
+        # 如果随访记录里至少有一条包含关键干预后指标，则认为有干预后数据
+        for fu in followups:
+            if any([
+                fu.get("干预后FPG"), fu.get("干预后PG120"),
+                fu.get("干预后糖化"), fu.get("干预后体重")
+            ]):
+                has_post = True
+                break
+    else:
+        # 兼容旧数据：顶层存在任何干预后字段也视为有干预后
+        has_post = any([
+            patient_combined_data.get("干预后FPG"),
+            patient_combined_data.get("干预后PG120"),
+            patient_combined_data.get("干预后糖化"),
+            patient_combined_data.get("干预后体重")
+        ])
     mode = "post" if has_post else "pre"
-    input_text = "请为这位糖尿病患者制定个体化的营养治疗方案，并预测可能的效果" if mode == "pre" else "请为这位糖尿病患者进行干预前后对比分析，并给出下一阶段的营养建议。"
+    input_text = "请为这位糖尿病患者依据英纽林产品说明制定个体化的营养治疗方案，并预测可能的效果" if mode == "pre" else "请为这位糖尿病患者进行干预前后对比分析，并给出下一阶段的营养建议。"
     rag_chain = build_rag_chain(vectordb, mode)
 
     base_data = {
@@ -533,18 +551,29 @@ def generate_plan(patient_combined_data: dict) -> str:
     }
     post_data = {}
     if mode == "post":
-        post_symptom_detail = symptom_dict_to_str(patient_combined_data.get("干预后体感子项", {}))
+        # 如果随访记录存在，优先取最新一条随访的干预后数据（或取第一条，可由您指定）
+        if followups and isinstance(followups, list):
+            latest_followup = followups[-1]  # 取最后一次随访
+            post_symptom = latest_followup.get("干预后体感子项", {})
+        else:
+            # 兼容旧模式：直接从顶层字段读取
+            latest_followup = patient_combined_data
+            post_symptom = patient_combined_data.get("干预后体感子项", {})
+        
+        post_symptom_detail = symptom_dict_to_str(post_symptom)
         post_data = {
-            "post_weight": patient_combined_data.get("干预后体重", "未知"),
-            "post_bmi": patient_combined_data.get("干预后BMI", "未知"),
-            "post_waist": patient_combined_data.get("干预后腰围", "未知"),
-            "post_sbp": patient_combined_data.get("干预后高压", "未知"),
-            "post_dbp": patient_combined_data.get("干预后低压", "未知"),
-            "post_fpg": patient_combined_data.get("干预后FPG", "未知"),
-            "post_pg2h": patient_combined_data.get("干预后PG120", "未知"),
-            "post_hba1c": patient_combined_data.get("干预后糖化", "未知"),
+            "post_weight": latest_followup.get("干预后体重", "未知"),
+            "post_bmi": latest_followup.get("干预后BMI", "未知"),
+            "post_waist": latest_followup.get("干预后腰围", "未知"),
+            "post_sbp": latest_followup.get("干预后高压", "未知"),
+            "post_dbp": latest_followup.get("干预后低压", "未知"),
+            "post_fpg": latest_followup.get("干预后FPG", "未知"),
+            "post_pg2h": latest_followup.get("干预后PG120", "未知"),
+            "post_hba1c": latest_followup.get("干预后糖化", "未知"),
             "post_symptom_detail": post_symptom_detail,
         }
+    
+    # 其余部分（fb_symptoms, selected_products 等）保持不变，调用 invoke
     fb_symptoms = patient_combined_data.get("使用反馈症状", [])
     fb_symptoms_str = ", ".join(fb_symptoms) if fb_symptoms else "无"
     fb_notes = patient_combined_data.get("使用反馈备注", "") or "无"
@@ -1230,10 +1259,10 @@ def patient_info_entry():
         if st.session_state.get("ai_plan"):
             st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
     
-    if st.button("🔄 重建知识库（更新 PDF 后使用）"):
-        load_knowledge_base.clear()   # 清除缓存
-        st.cache_resource.clear()     # 清除所有资源缓存（可选，更彻底）
-        st.rerun()
+    #if st.button("🔄 重建知识库（更新 PDF 后使用）"):
+    #    load_knowledge_base.clear()   # 清除缓存
+    #    st.cache_resource.clear()     # 清除所有资源缓存（可选，更彻底）
+    #    st.rerun()
 
     # ===== 患者列表与血糖曲线 =====
     st.subheader("📋 已录入患者列表")
