@@ -834,8 +834,8 @@ def patient_info_entry():
                     disease_input = auto_disease
             with col4:
                 location = st.text_input("所在地/省/市/区", value=selected_patient_data.get("所在地", "") if selected_patient_data else "")
-                complications = st.text_input("并发症", value=selected_patient_data.get("并发症", "") if selected_patient_data else "")
-                other_chronic = st.text_input("其他慢病", value=selected_patient_data.get("其他慢病", "") if selected_patient_data else "")
+            complications = st.text_input("并发症", value=selected_patient_data.get("并发症", "") if selected_patient_data else "")
+            other_chronic = st.text_input("其他慢病", value=selected_patient_data.get("其他慢病", "") if selected_patient_data else "")
 
         # ========== 干预前数据（大板块） ==========
         with st.expander("2️⃣ 干预前数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
