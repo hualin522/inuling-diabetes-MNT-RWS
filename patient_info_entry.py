@@ -1069,31 +1069,26 @@ def patient_info_entry():
             col1, col2 = st.columns(2)
             with col1:
                 # 项目/医疗地区（预定义 + 其他）
-                predefined_projects = ["医疗", "合作项目"]  # 与 prompts.py 中的键保持一致
+                # 下拉框 + 其他输入
+                predefined_projects = ["项目A", "项目B"]  # 与 prompts.py 键名一致
                 current_val = selected_patient_data.get("项目/医疗地区", "") if selected_patient_data else ""
-                # 确定当前值对应的下拉选项索引和自定义文本
                 if current_val in predefined_projects:
-                    select_index = predefined_projects.index(current_val) + 1  # 跳过空选项
+                    select_index = predefined_projects.index(current_val) + 1
                     other_val = ""
                 elif current_val:
-                    select_index = len(predefined_projects) + 1  # “其他”选项的索引
+                    select_index = len(predefined_projects) + 1
                     other_val = current_val
                 else:
                     select_index = 0
                     other_val = ""
-                project_options = [""] + predefined_projects + ["其他"]
                 project_region_select = st.selectbox(
                     "项目/医疗地区",
-                    options=project_options,
+                    options=[""] + predefined_projects + ["其他"],
                     index=select_index,
                     key="project_region_select"
                 )
                 if project_region_select == "其他":
-                    project_region = st.text_input(
-                        "请输入项目名称",
-                        value=other_val,
-                        key="project_region_other"
-                    )
+                    project_region = st.text_input("请输入项目/医疗地区名称", value=other_val, key="project_region_other")
                 elif project_region_select == "":
                     project_region = ""
                 else:
