@@ -466,20 +466,14 @@ def load_knowledge_base():
     return vectordb
 
 def build_rag_chain(vectordb, mode="pre", source=None):
-    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
-    
+    # ...
     if mode == "pre":
         template_dict = pre_templates
     else:
         template_dict = post_templates
     
-    # 尝试模糊匹配：source 包含在某个键中，或键包含在 source 中
-    template = template_dict.get("default")  # 默认先取 default
-    if source:
-        for key in template_dict:
-            if key != "default" and (key in source or source in key):
-                template = template_dict[key]
-                break
+    # 精确匹配，若 source 不在字典中则回退到 default
+    template = template_dict.get(source) or template_dict["default"]
     
     prompt = ChatPromptTemplate.from_template(template)
     
@@ -1064,7 +1058,36 @@ def patient_info_entry():
         with st.expander("6️⃣ 案例来源 & 备注", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                project_region = st.text_input("项目/医疗地区", value=selected_patient_data.get("项目/医疗地区", "") if selected_patient_data else "")
+                # 项目/医疗地区（预定义 + 其他）
+                predefined_projects = ["医疗", "合作项目"]  # 与 prompts.py 中的键保持一致
+                current_val = selected_patient_data.get("项目/医疗地区", "") if selected_patient_data else ""
+                # 确定当前值对应的下拉选项索引和自定义文本
+                if current_val in predefined_projects:
+                    select_index = predefined_projects.index(current_val) + 1  # 跳过空选项
+                    other_val = ""
+                elif current_val:
+                    select_index = len(predefined_projects) + 1  # “其他”选项的索引
+                    other_val = current_val
+                else:
+                    select_index = 0
+                    other_val = ""
+                project_options = [""] + predefined_projects + ["其他"]
+                project_region_select = st.selectbox(
+                    "项目/医疗地区",
+                    options=project_options,
+                    index=select_index,
+                    key="project_region_select"
+                )
+                if project_region_select == "其他":
+                    project_region = st.text_input(
+                        "请输入项目名称",
+                        value=other_val,
+                        key="project_region_other"
+                    )
+                elif project_region_select == "":
+                    project_region = ""
+                else:
+                    project_region = project_region_select
                 health_coach = st.text_input("健管师", value=selected_patient_data.get("健管师", "") if selected_patient_data else "")
                 doctor = st.text_input("医生", value=selected_patient_data.get("医生", "") if selected_patient_data else "")
                 clinic_name = st.text_input("诊所/门店名称", value=selected_patient_data.get("诊所/门店名称", "") if selected_patient_data else "")
