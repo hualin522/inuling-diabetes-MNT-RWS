@@ -410,7 +410,7 @@ import importlib.util
 import sys
 
 # 加载加密资产（缓存，只解压一次）
-@st.cache_resource
+@st.cache_resource(ttl=10800)  # 3小时后自动过期
 def load_encrypted_assets():
     """解密资产文件，返回临时目录路径"""
     password = st.secrets.get("ASSETS_PASSWORD")
@@ -422,6 +422,16 @@ def load_encrypted_assets():
     if not os.path.exists(zip_path):
         st.error("❌ 未找到加密文件 assets.enc.zip")
         st.stop()
+
+    # 自动检测文件是否被更新
+    current_mtime = os.path.getmtime(zip_path)
+    if "asset_mtime" not in st.session_state:
+        st.session_state.asset_mtime = current_mtime
+    elif abs(st.session_state.asset_mtime - current_mtime) > 1e-6:
+        # 文件修改时间已变化，清除所有旧的缓存资源
+        st.cache_resource.clear()
+        st.session_state.asset_mtime = current_mtime
+        # 注意：clear() 后本函数会被重新调用，下面的逻辑会再次执行
 
     tmp_dir = tempfile.mkdtemp()
     try:
