@@ -443,8 +443,8 @@ def load_prompts():
     return prompts
 
 prompts = load_prompts()
-pre_template = prompts.pre_template
-post_template = prompts.post_template
+pre_templates = prompts.pre_templates    # 字典
+post_templates = prompts.post_templates  # 字典
 
 @st.cache_resource
 def load_knowledge_base():
@@ -465,10 +465,16 @@ def load_knowledge_base():
     vectordb = FAISS.from_documents(chunks, embedding)
     return vectordb
 
-def build_rag_chain(vectordb, mode="pre"):
+def build_rag_chain(vectordb, mode="pre", source=None):
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
-    # 根据模式选择模板
-    template = pre_template if mode == "pre" else post_template
+    
+    # 根据来源选择模板，优先使用匹配的，否则用 default
+    if mode == "pre":
+        template_dict = pre_templates
+    else:
+        template_dict = post_templates
+    template = template_dict.get(source) or template_dict.get("default")
+    
     prompt = ChatPromptTemplate.from_template(template)
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
     if not api_key:
@@ -483,6 +489,9 @@ def generate_plan(patient_combined_data: dict) -> str:
     vectordb = load_knowledge_base()
     if vectordb is None:
         return "❌ 知识库未加载，请检查 PDF 文件"
+    
+    # 获取患者来源（表单中的“项目/医疗地区”）
+    source = patient_combined_data.get("项目/医疗地区", "").strip()
     # 判断是否有干预后数据：优先检查随访记录，其次检查顶层字段
     has_post = False
     followups = patient_combined_data.get("随访记录", [])
@@ -503,7 +512,7 @@ def generate_plan(patient_combined_data: dict) -> str:
         ])
     mode = "post" if has_post else "pre"
     input_text = "请为这位糖尿病患者依据英纽林产品说明制定个体化的营养治疗方案，并预测可能的效果" if mode == "pre" else "请为这位糖尿病患者进行干预前后对比分析，并给出下一阶段的营养建议。"
-    rag_chain = build_rag_chain(vectordb, mode)
+    rag_chain = build_rag_chain(vectordb, mode, source=source)
 
     base_data = {
         "height": patient_combined_data.get("干预前身高", "未知"),
