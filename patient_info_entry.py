@@ -468,14 +468,21 @@ def load_knowledge_base():
 def build_rag_chain(vectordb, mode="pre", source=None):
     retriever = vectordb.as_retriever(search_kwargs={"k": 3})
     
-    # 根据来源选择模板，优先使用匹配的，否则用 default
     if mode == "pre":
         template_dict = pre_templates
     else:
         template_dict = post_templates
-    template = template_dict.get(source) or template_dict.get("default")
+    
+    # 尝试模糊匹配：source 包含在某个键中，或键包含在 source 中
+    template = template_dict.get("default")  # 默认先取 default
+    if source:
+        for key in template_dict:
+            if key != "default" and (key in source or source in key):
+                template = template_dict[key]
+                break
     
     prompt = ChatPromptTemplate.from_template(template)
+    
     api_key = st.secrets.get("DEEPSEEK_API_KEY")
     if not api_key:
         st.error("❌ 请在 Streamlit Secrets 中设置 DEEPSEEK_API_KEY")
