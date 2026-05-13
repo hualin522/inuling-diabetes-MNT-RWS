@@ -476,6 +476,7 @@ def load_knowledge_base():
     return vectordb
 
 def build_rag_chain(vectordb, mode="pre", source=None):
+    retriever = vectordb.as_retriever(search_kwargs={"k": 3})
     # ...
     if mode == "pre":
         template_dict = pre_templates
@@ -1068,7 +1069,38 @@ def patient_info_entry():
         with st.expander("6️⃣ 案例来源 & 备注", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                project_region = st.text_input("项目/医疗地区", value=selected_patient_data.get("项目/医疗地区", "") if selected_patient_data else "")
+                # 项目/医疗地区：下拉 + 专用文本输入
+                predefined_options = ["医疗", "合作项目", "其他"]
+                current_val = selected_patient_data.get("项目/医疗地区", "") if selected_patient_data else ""
+                
+                # 分离下拉值和自定义文本值
+                if current_val in predefined_options:
+                    dropdown_val = current_val
+                    custom_text = ""
+                elif current_val:  # 之前保存的是自定义名称（如“试验中心”）
+                    dropdown_val = "其他"
+                    custom_text = current_val
+                else:
+                    dropdown_val = "医疗"  # 默认值
+                    custom_text = ""
+                
+                project_dropdown = st.selectbox(
+                    "项目类型",
+                    options=predefined_options,
+                    index=predefined_options.index(dropdown_val),
+                    key="project_dropdown"
+                )
+                project_custom = st.text_input(
+                    "如选择“其他”，请填写具体项目名称",
+                    value=custom_text,
+                    key="project_custom"
+                )
+                
+                # 确定最终的项目标识（提交时使用）
+                if project_dropdown == "其他":
+                    project_region = project_custom.strip()
+                else:
+                    project_region = project_dropdown
                 health_coach = st.text_input("健管师", value=selected_patient_data.get("健管师", "") if selected_patient_data else "")
                 doctor = st.text_input("医生", value=selected_patient_data.get("医生", "") if selected_patient_data else "")
                 clinic_name = st.text_input("诊所/门店名称", value=selected_patient_data.get("诊所/门店名称", "") if selected_patient_data else "")
