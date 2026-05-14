@@ -285,9 +285,9 @@ def save_to_google_sheets(patient_dict):
                 header_row = sheet.row_values(1)
             row_data = [flat.get(col, "") for col in header_row]
             sheet.append_row(row_data)
-        st.success("✅ 数据已同步至 Google Sheets")
+        st.success("✅ 数据已同步至云端")
     except Exception as e:
-        st.warning(f"⚠️ Google Sheets 写入失败（数据已保存在本地列表中）: {e}")
+        st.warning(f"⚠️ 云端写入失败（数据已保存在本地列表中）: {e}")
 
 def load_patients_from_sheets(submitter_id=None):
     try:
@@ -399,7 +399,7 @@ def load_patients_from_sheets(submitter_id=None):
         return list(patient_map.values())
 
     except Exception as e:
-        st.error(f"从 Google Sheets 加载数据失败：{e}")
+        st.error(f"从云端加载数据失败：{e}")
         return []
 
 # ============================================
@@ -1366,7 +1366,7 @@ def patient_info_entry():
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
                 save_to_google_sheets(save_data)
             else:
-                st.info("💡 提示：数据将自动云端汇总")
+                st.info("💡 提示：待云端系统配置完成，数据将自动云端汇总")
             st.balloons()
 
     # ===== AI 方案建议 =====
