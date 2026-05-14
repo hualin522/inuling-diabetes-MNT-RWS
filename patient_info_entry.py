@@ -1136,6 +1136,12 @@ def patient_info_entry():
                 supervisor = st.text_input("指导健管师", value=selected_patient_data.get("指导健管师", "") if selected_patient_data else "")
             remarks = st.text_area("备注信息", value=selected_patient_data.get("备注", "") if selected_patient_data else "")
 
+                # 提交时用于判断随访是否重复的核心字段
+        DUPLICATE_CHECK_FIELDS = [
+            "干预后5点日期", "干预后体重", "干预后FPG", "干预后PG120", "干预后糖化",
+            "干预后体感总分",
+        ]
+        
         # 提交
         submitted = st.form_submit_button("✅ 提交并保存患者信息")
         if submitted:
@@ -1251,8 +1257,19 @@ def patient_info_entry():
                 if "随访记录" not in selected_patient_data:
                     selected_patient_data["随访记录"] = []
                 if not empty_followup:
-                    selected_patient_data["随访记录"].append(new_followup)
-                    st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
+                    # 检查是否与最近一次随访重复
+                    last_fu = selected_patient_data["随访记录"][-1] if selected_patient_data["随访记录"] else None
+                    duplicate = False
+                    if last_fu:
+                        duplicate = all(
+                            last_fu.get(f) == new_followup.get(f)
+                            for f in DUPLICATE_CHECK_FIELDS
+                        )
+                    if duplicate:
+                        st.info("📝 本次干预后数据与最近一次随访完全相同，已跳过重复记录，仅更新其他信息。")
+                    else:
+                        selected_patient_data["随访记录"].append(new_followup)
+                        st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
                 else:
                     st.info("📝 未填写任何干预后数据，仅更新基线信息（如有修改）。")
                 st.session_state.last_patient = selected_patient_data
@@ -1349,7 +1366,7 @@ def patient_info_entry():
             if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
                 save_to_google_sheets(save_data)
             else:
-                st.info("💡 提示：配置 Google Sheets 后数据将自动云端汇总")
+                st.info("💡 提示：数据将自动云端汇总")
             st.balloons()
 
     # ===== AI 方案建议 =====
@@ -1363,13 +1380,21 @@ def patient_info_entry():
                 try:
                     plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
-                    # 将方案保存到当前患者数据中（字段名可按需修改）
+                    # 将方案存入当前患者数据
                     patient_for_plan["AI方案"] = plan
+                    # 自动保存到 Google Sheets（不新增随访记录）
+                    if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
+                        # 注意：随访记录必须转为 JSON 字符串再保存
+                        save_data = patient_for_plan.copy()
+                        if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
+                            save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
+                        save_to_google_sheets(save_data)
+                        st.success("✅ 方案已自动同步至云端")
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
-            st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
-            st.caption("💡 方案已生成，再次点击上方“提交并保存患者信息”按钮可将其保存至云端。")
+            st.text_area("AI 建议", value=st.session_state.ai_plan, height=600)
+
     
     #if st.button("🔄 重建知识库（更新 PDF 后使用）"):
     #    load_knowledge_base.clear()   # 清除缓存
@@ -1458,22 +1483,24 @@ def patient_info_entry():
                     auc_data.append({"记录": f"随访{i+1}", "AUC": compute_auc(post_vals)})
                 st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
 
-                # ===== 7点血糖数据汇总表（可选） =====
+        # ===== 7点血糖数据汇总表（可选） =====
         show_7point = st.checkbox("📋 显示日常7点血糖数据汇总", value=False)
         if show_7point:
             st.subheader("📋 日常7点血糖数据")
-            times = ["早餐前", "早餐后2h", "午餐前", "午餐后2h", "晚餐前", "晚餐后2h", "睡前"]
+            time_labels = ["早餐前", "早餐后2h", "午餐前", "午餐后2h", "晚餐前", "晚餐后2h", "睡前"]
             
-            # 干预前数据
+            # 构建数据行：干预前 + 各次随访
+            rows = []
+            # 干预前行
             pre_7 = [
                 patient.get("干预前早餐前"), patient.get("干预前早餐后2h"),
                 patient.get("干预前午餐前"), patient.get("干预前午餐后2h"),
                 patient.get("干预前晚餐前"), patient.get("干预前晚餐后2h"),
                 patient.get("干预前睡前")
             ]
-            table_data = {"时间": times, "干预前": pre_7}
+            rows.append(("干预前", pre_7))
             
-            # 各次随访的干预后数据
+            # 各次随访行
             for i, rec in enumerate(patient.get("随访记录", []), start=1):
                 post_7 = [
                     rec.get("干预后早餐前"), rec.get("干预后早餐后2h"),
@@ -1481,11 +1508,15 @@ def patient_info_entry():
                     rec.get("干预后晚餐前"), rec.get("干预后晚餐后2h"),
                     rec.get("干预后睡前")
                 ]
-                fu_label = f"随访{i}\n({rec.get('随访时间', '')[:10]})"
-                table_data[fu_label] = post_7
+                fu_label = f"随访{i} ({rec.get('随访时间', '')[:10]})"
+                rows.append((fu_label, post_7))
             
-            df_7point = pd.DataFrame(table_data)
-            st.dataframe(df_7point, use_container_width=True, height=300)
+            # 构造 DataFrame 并转置：行为记录，列为时间点
+            df_7point = pd.DataFrame(
+                {label: vals for label, vals in rows},
+                index=time_labels
+            ).T
+            st.dataframe(df_7point, use_container_width=True)
 
         # ===== 体感评分对比（可选） =====
         show_symptom = st.checkbox("📊 显示单项体感评分对比", value=False)
