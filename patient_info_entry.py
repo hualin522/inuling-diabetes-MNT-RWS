@@ -1071,7 +1071,7 @@ def patient_info_entry():
 
         # ========== 干预方案 ==========
         with st.expander("4️⃣ 干预方案与使用反馈", expanded=False):
-            intervention_products = st.multiselect("营养治疗产品（可多选）", ["畅快", "纽畅", "纽畅B", "其他营养治疗"], key="intervention_products")
+            intervention_products = st.multiselect("营养治疗产品（可多选）", ["畅快/清畅", "纽畅/唐畅", "纽畅B/唐畅B", "其他营养治疗"], key="intervention_products")
             other_product_name = ""
             if "其他营养治疗" in intervention_products:
                 other_product_name = st.text_input("请输入‘其他营养治疗’的具体名称", key="other_product_name")
