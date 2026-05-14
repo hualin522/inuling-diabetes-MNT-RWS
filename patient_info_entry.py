@@ -5,6 +5,7 @@ from datetime import datetime, date
 import plotly.graph_objects as go
 import os
 import json
+import uuid
 
 # ===== 依赖自检 =====
 missing_pkgs = []
@@ -569,6 +570,31 @@ def generate_plan(patient_combined_data: dict) -> str:
             "post_hba1c": latest_followup.get("干预后糖化", "未知"),
             "post_symptom_detail": post_symptom_detail,
         }
+    # 构建历史随访摘要（用于 post 模式，包含各项体感）
+    history_text = ""
+    if mode == "post" and followups and isinstance(followups, list):
+        lines = []
+        for i, fu in enumerate(followups, start=1):
+            fu_time = fu.get("随访时间", "")[:10]
+            weight = fu.get("干预后体重", "?")
+            fpg = fu.get("干预后FPG", "?")
+            pg120 = fu.get("干预后PG120", "?")
+            hba1c = fu.get("干预后糖化", "?")
+            # 获取体感子项
+            symp_dict = fu.get("干预后体感子项", {})
+            if symp_dict:
+                symp_items = [f"{k}{v}" for k, v in symp_dict.items() if v is not None]
+                symp_str = "，".join(symp_items) if symp_items else "无"
+            else:
+                symp_str = "无"
+            lines.append(f"随访{i} ({fu_time}): 体重{weight}kg, FPG{fpg}, PG120{pg120}, 糖化{hba1c}%, 体感({symp_str})")
+        if lines:
+            history_text = "；".join(lines)
+        else:
+            history_text = "暂无历史随访数据"
+    else:
+        history_text = ""
+
     fb_symptoms = patient_combined_data.get("使用反馈症状", [])
     fb_symptoms_str = ", ".join(fb_symptoms) if fb_symptoms else "无"
     fb_notes = patient_combined_data.get("使用反馈备注", "") or "无"
@@ -584,6 +610,7 @@ def generate_plan(patient_combined_data: dict) -> str:
         "feedback_notes": fb_notes,
         "selected_products": selected_products,
         "intervention_detail": intervention_detail,
+        "history_followups": history_text,   # 新增字段
     }
     result = rag_chain.invoke(invoke_input)
     return result["answer"]
@@ -1232,6 +1259,7 @@ def patient_info_entry():
             else:
                 base_followups = [] if empty_followup else [new_followup]
                 base_data = {
+                    "患者ID": str(uuid.uuid4()),   # 新增
                     "提交者ID": submitter_id if not is_admin else "admin",
                     "录入时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "患者姓名": name,
@@ -1335,10 +1363,13 @@ def patient_info_entry():
                 try:
                     plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
+                    # 将方案保存到当前患者数据中（字段名可按需修改）
+                    patient_for_plan["AI方案"] = plan
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
             st.text_area("AI 建议", value=st.session_state.ai_plan, height=400)
+            st.caption("💡 方案已生成，再次点击上方“提交并保存患者信息”按钮可将其保存至云端。")
     
     #if st.button("🔄 重建知识库（更新 PDF 后使用）"):
     #    load_knowledge_base.clear()   # 清除缓存
@@ -1427,6 +1458,35 @@ def patient_info_entry():
                     auc_data.append({"记录": f"随访{i+1}", "AUC": compute_auc(post_vals)})
                 st.dataframe(pd.DataFrame(auc_data), use_container_width=True)
 
+                # ===== 7点血糖数据汇总表（可选） =====
+        show_7point = st.checkbox("📋 显示日常7点血糖数据汇总", value=False)
+        if show_7point:
+            st.subheader("📋 日常7点血糖数据")
+            times = ["早餐前", "早餐后2h", "午餐前", "午餐后2h", "晚餐前", "晚餐后2h", "睡前"]
+            
+            # 干预前数据
+            pre_7 = [
+                patient.get("干预前早餐前"), patient.get("干预前早餐后2h"),
+                patient.get("干预前午餐前"), patient.get("干预前午餐后2h"),
+                patient.get("干预前晚餐前"), patient.get("干预前晚餐后2h"),
+                patient.get("干预前睡前")
+            ]
+            table_data = {"时间": times, "干预前": pre_7}
+            
+            # 各次随访的干预后数据
+            for i, rec in enumerate(patient.get("随访记录", []), start=1):
+                post_7 = [
+                    rec.get("干预后早餐前"), rec.get("干预后早餐后2h"),
+                    rec.get("干预后午餐前"), rec.get("干预后午餐后2h"),
+                    rec.get("干预后晚餐前"), rec.get("干预后晚餐后2h"),
+                    rec.get("干预后睡前")
+                ]
+                fu_label = f"随访{i}\n({rec.get('随访时间', '')[:10]})"
+                table_data[fu_label] = post_7
+            
+            df_7point = pd.DataFrame(table_data)
+            st.dataframe(df_7point, use_container_width=True, height=300)
+
         # ===== 体感评分对比（可选） =====
         show_symptom = st.checkbox("📊 显示单项体感评分对比", value=False)
         if show_symptom:
@@ -1475,7 +1535,7 @@ def patient_info_entry():
                 st.plotly_chart(fig, use_container_width=True)
 
         # ===== 生化指标趋势（可选） =====
-        show_biochem = st.checkbox("📊 显示单项生化指标变化趋势", value=False)
+        show_biochem = st.checkbox("📊 显示单项生化指标变化趋势，需消耗较多资源，耐心等待", value=False)
         if show_biochem:
             st.subheader("🧪 单项生化指标变化趋势")
             bio_fields = [
