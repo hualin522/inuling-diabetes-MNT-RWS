@@ -1383,13 +1383,13 @@ def patient_info_entry():
                     # 将方案存入当前患者数据
                     patient_for_plan["AI方案"] = plan
                     # 自动保存到 Google Sheets（不新增随访记录）
-                    if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
+                    #if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
                         # 注意：随访记录必须转为 JSON 字符串再保存
-                        save_data = patient_for_plan.copy()
-                        if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
-                            save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
-                        save_to_google_sheets(save_data)
-                        st.success("✅ 方案已自动同步至云端")
+                        #save_data = patient_for_plan.copy()
+                        #if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
+                            #save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
+                        #save_to_google_sheets(save_data)
+                        #st.success("✅ 方案已自动同步至云端")
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
