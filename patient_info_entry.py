@@ -848,7 +848,13 @@ def patient_info_entry():
                                                         value=safe_float(selected_patient_data.get("干预前胰岛素剂量/次")) if selected_patient_data else None,
                                                         key="pre_ins_dose", disabled=selected_patient_data is not None)
                 with col2:
-                    pass
+                    pre_insulin_type = st.text_input(
+                        "胰岛素种类",
+                        value=selected_patient_data.get("干预前胰岛素种类", "") if selected_patient_data else "",
+                        key="pre_insulin_type",
+                        disabled=selected_patient_data is not None,
+                        placeholder="如：门冬胰岛素、甘精胰岛素等"
+                    )
                 st.subheader("口服药")
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -1008,7 +1014,12 @@ def patient_info_entry():
                     post_insulin_times = st.number_input("胰岛素 (次/天)", min_value=0.0, step=1.0, value=None, key="post_ins_times")
                     post_insulin_dose = st.number_input("剂量/次 (IU)", min_value=0.0, step=1.0, value=None, key="post_ins_dose")
                 with col2:
-                    pass
+                    post_insulin_type = st.text_input(
+                        "胰岛素种类",
+                        value="",
+                        key="post_insulin_type",
+                        placeholder="如：门冬胰岛素、甘精胰岛素等"
+                    )
                 st.subheader("口服药")
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -1195,6 +1206,7 @@ def patient_info_entry():
                 "干预后体感日期": post_symptom_date,
                 "干预后体感子项": post_symptom_scores,
                 "干预后体感总分": post_total,
+                "干预后胰岛素种类": post_insulin_type,
                 "干预后胰岛素次/天": post_insulin_times,
                 "干预后胰岛素剂量/次": post_insulin_dose,
                 "干预后二甲双胍天/次": post_metformin_times,
@@ -1299,6 +1311,7 @@ def patient_info_entry():
                     "干预前体感日期": pre_symptom_date,
                     "干预前体感子项": pre_symptom_scores,
                     "干预前体感总分": pre_total,
+                    "干预前胰岛素种类": pre_insulin_type,
                     "干预前胰岛素次/天": pre_insulin_times,
                     "干预前胰岛素剂量/次": pre_insulin_dose,
                     "干预前二甲双胍天/次": pre_metformin_times,
