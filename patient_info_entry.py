@@ -880,13 +880,13 @@ def patient_info_entry():
                                                 value=safe_float(selected_patient_data.get("干预前糖化")) if selected_patient_data else None,
                                                 key="pre_hba1c", disabled=selected_patient_data is not None)
                 with col2:
-                    pre_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1,
+                    pre_tg = st.number_input("总甘油三酯 TG (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前TG")) if selected_patient_data else None,
                                             key="pre_tg", disabled=selected_patient_data is not None)
                 # 第二行：TC  LDL  HDL（三列）
                 col3, col4, col5 = st.columns(3)
                 with col3:
-                    pre_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1,
+                    pre_tc = st.number_input("总胆固醇 TC (mmol/L)", min_value=0.0, step=0.1,
                                             value=safe_float(selected_patient_data.get("干预前TC")) if selected_patient_data else None,
                                             key="pre_tc", disabled=selected_patient_data is not None)
                 with col4:
@@ -1029,11 +1029,11 @@ def patient_info_entry():
                 with col1:
                     post_hba1c = st.number_input("糖化/%", min_value=0.0, max_value=20.0, step=0.1, value=None, key="post_hba1c")
                 with col2:
-                    post_tg = st.number_input("TG (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tg")
+                    post_tg = st.number_input("总甘油三酯 TG (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tg")
                 # 第二行：TC  LDL  HDL（三列）
                 col3, col4, col5 = st.columns(3)
                 with col3:
-                    post_tc = st.number_input("TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
+                    post_tc = st.number_input("总胆固醇 TC (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_tc")
                 with col4:
                     post_ldl = st.number_input("LDL-C (mmol/L)", min_value=0.0, step=0.1, value=None, key="post_ldl")
                 with col5:
