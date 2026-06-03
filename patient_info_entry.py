@@ -773,9 +773,37 @@ def patient_info_entry():
             complications = st.text_input("并发症", value=default_patient.get("并发症", "") if default_patient else "")
             other_chronic = st.text_input("其他慢病", value=default_patient.get("其他慢病", "") if default_patient else "")
 
+        # 案例来源与备注
+        with st.expander("2️⃣ 案例来源 & 备注", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                predefined_options = ["医疗", "合作项目", "其他"]
+                current_val = default_patient.get("项目/医疗地区", "") if default_patient else ""
+                if current_val in predefined_options:
+                    dropdown_val = current_val
+                    custom_text = ""
+                elif current_val:
+                    dropdown_val = "其他"
+                    custom_text = current_val
+                else:
+                    dropdown_val = "医疗"
+                    custom_text = ""
+                project_dropdown = st.selectbox("项目类型", options=predefined_options, index=predefined_options.index(dropdown_val), key="project_dropdown")
+                project_custom = st.text_input("如选择“其他”，请填写具体项目名称", value=custom_text, key="project_custom")
+                if project_dropdown == "其他":
+                    project_region = project_custom.strip()
+                else:
+                    project_region = project_dropdown
+                health_coach = st.text_input("健管师", value=default_patient.get("健管师", "") if default_patient else "", key="health_coach")
+                doctor = st.text_input("医生", value=default_patient.get("医生", "") if default_patient else "", key="doctor")
+                clinic_name = st.text_input("诊所/门店名称", value=default_patient.get("诊所/门店名称", "") if default_patient else "", key="clinic_name")
+            with col2:
+                submitter = st.text_input("提交人", value=default_patient.get("提交人", "") if default_patient else "", key="submitter")
+                supervisor = st.text_input("指导健管师", value=default_patient.get("指导健管师", "") if default_patient else "", key="supervisor")
+            remarks = st.text_area("备注信息", value=default_patient.get("备注", "") if default_patient else "", key="remarks")
         # 干预前数据（编辑基线模式下字段可编辑，否则若已有患者则禁用）
         pre_disabled = (selected_patient_data is not None and st.session_state.edit_mode != "baseline")
-        with st.expander("2️⃣ 干预前数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
+        with st.expander("3️⃣ 干预前数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
             with st.expander("基本指标", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -954,12 +982,22 @@ def patient_info_entry():
                     pre_dinner_after = st.number_input("晚餐后2h", step=0.1, value=safe_float(default_patient.get("干预前晚餐后2h")) if default_patient else None, key="pre_dinner_after", disabled=pre_disabled)
                 pre_bed = st.number_input("睡前", step=0.1, value=safe_float(default_patient.get("干预前睡前")) if default_patient else None, key="pre_bed", disabled=pre_disabled)
 
+            # 干预前身体不适描述
+            with st.expander("身体不适描述", expanded=False):
+                pre_discomfort = st.text_area(
+                    "干预前身体不适情况",
+                    value=selected_patient_data.get("干预前身体不适", "") if selected_patient_data else "",
+                    key="pre_discomfort",
+                    disabled=selected_patient_data is not None,
+                    placeholder="请描述患者当前的主观不适，如头晕、乏力、口渴等……",
+                    height=100
+                )
         # 干预后数据（如果正在编辑随访，使用目标随访数据作为默认值）
         default_followup = None
         if st.session_state.edit_mode == "followup" and st.session_state.edit_target_followup:
             default_followup = st.session_state.edit_target_followup
 
-        with st.expander("3️⃣ 干预后数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
+        with st.expander("4️⃣ 干预后数据（基本指标、五点血糖、体感、药物、生化、7点血糖）", expanded=False):
             with st.expander("基本指标", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1135,8 +1173,17 @@ def patient_info_entry():
                     post_dinner_after = st.number_input("晚餐后2h", step=0.1, value=safe_float(default_followup.get("干预后晚餐后2h")) if default_followup else None, key="post_dinner_after")
                 post_bed = st.number_input("睡前", step=0.1, value=safe_float(default_followup.get("干预后睡前")) if default_followup else None, key="post_bed")
 
+            # 干预后身体不适描述
+            with st.expander("身体不适描述", expanded=False):
+                post_discomfort = st.text_area(
+                    "干预后身体不适情况",
+                    value=None,   # 干预后默认为空
+                    key="post_discomfort",
+                    placeholder="请描述干预后身体不适的变化情况……",
+                    height=100
+                )
         # 干预方案与使用反馈
-        with st.expander("4️⃣ 干预方案与使用反馈", expanded=False):
+        with st.expander("5️⃣ 干预方案与使用反馈", expanded=False):
             intervention_products = st.multiselect("营养治疗产品（可多选）", ["畅快/清畅", "纽畅/唐畅", "纽畅B/唐畅B", "其他营养治疗"],
                                                   default=default_followup.get("干预方案产品", []) if default_followup else [])
             other_product_name = ""
@@ -1151,7 +1198,7 @@ def patient_info_entry():
             feedback_notes = st.text_area("反馈详细描述", placeholder="……", value=default_followup.get("使用反馈备注", "") if default_followup else "", key="feedback_notes")
 
         # 用药调整情况
-        with st.expander("5️⃣ 用药调整情况", expanded=False):
+        with st.expander("6️⃣ 用药调整情况", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 drug_pre_date = st.date_input("干预前日期", value=safe_date(default_patient.get("用药调整干预前日期")) if default_patient else None, min_value=date(1900,1,1), key="drug_pre_date", disabled=pre_disabled)
@@ -1162,34 +1209,7 @@ def patient_info_entry():
             drug_reduction = st.selectbox("减药/停药", ["无变化", "减剂量", "减种类", "停用所有口服", "其他"],
                                          index=["无变化", "减剂量", "减种类", "停用所有口服", "其他"].index(default_followup.get("减药/停药情况", "无变化")) if default_followup else 0, key="drug_reduction")
 
-        # 案例来源与备注
-        with st.expander("6️⃣ 案例来源 & 备注", expanded=False):
-            col1, col2 = st.columns(2)
-            with col1:
-                predefined_options = ["医疗", "合作项目", "其他"]
-                current_val = default_patient.get("项目/医疗地区", "") if default_patient else ""
-                if current_val in predefined_options:
-                    dropdown_val = current_val
-                    custom_text = ""
-                elif current_val:
-                    dropdown_val = "其他"
-                    custom_text = current_val
-                else:
-                    dropdown_val = "医疗"
-                    custom_text = ""
-                project_dropdown = st.selectbox("项目类型", options=predefined_options, index=predefined_options.index(dropdown_val), key="project_dropdown")
-                project_custom = st.text_input("如选择“其他”，请填写具体项目名称", value=custom_text, key="project_custom")
-                if project_dropdown == "其他":
-                    project_region = project_custom.strip()
-                else:
-                    project_region = project_dropdown
-                health_coach = st.text_input("健管师", value=default_patient.get("健管师", "") if default_patient else "", key="health_coach")
-                doctor = st.text_input("医生", value=default_patient.get("医生", "") if default_patient else "", key="doctor")
-                clinic_name = st.text_input("诊所/门店名称", value=default_patient.get("诊所/门店名称", "") if default_patient else "", key="clinic_name")
-            with col2:
-                submitter = st.text_input("提交人", value=default_patient.get("提交人", "") if default_patient else "", key="submitter")
-                supervisor = st.text_input("指导健管师", value=default_patient.get("指导健管师", "") if default_patient else "", key="supervisor")
-            remarks = st.text_area("备注信息", value=default_patient.get("备注", "") if default_patient else "", key="remarks")
+
 
         DUPLICATE_CHECK_FIELDS = [
             "干预后5点日期", "干预后体重", "干预后FPG", "干预后PG120", "干预后糖化",
@@ -1283,6 +1303,7 @@ def patient_info_entry():
                 "干预方案细节": intervention_detail,
                 "使用反馈症状": feedback_symptoms,
                 "使用反馈备注": feedback_notes,
+                "干预后身体不适": post_discomfort,
             }
 
             def is_empty_followup(fu):
@@ -1367,6 +1388,7 @@ def patient_info_entry():
                         "提交人": submitter,
                         "指导健管师": supervisor,
                         "备注": remarks,
+                        "干预前身体不适": pre_discomfort,
                     })
                     update_patient_in_sheets(target_patient)
                     # 更新本地 patients 列表
