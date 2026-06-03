@@ -675,9 +675,21 @@ def patient_info_entry():
         all_patient_names = list({p["患者姓名"] for p in st.session_state.patients if p.get("提交者ID") == submitter_id})
     patient_names = ["+ 新增患者"] + all_patient_names
 
+    # 根据 form_reset 标志动态设置 index
+    if st.session_state.get("form_reset", False):
+        default_index = 0          # 强制选中“+ 新增患者”
+        st.session_state.form_reset = False   # 立即清除标志
+    else:
+        default_index = None       # 保持之前的选择（记忆）
+
     col_sel, col_edit_btn = st.columns([3,1])
     with col_sel:
-        selected_patient_name = st.selectbox("选择已有患者（可自动填充干预前数据）", patient_names, key="selected_patient")
+        selected_patient_name = st.selectbox(
+            "选择已有患者（可自动填充干预前数据）",
+            patient_names,
+            index=default_index,
+            key="selected_patient"
+        )
     with col_edit_btn:
         if selected_patient_name != "+ 新增患者" and st.button("✏️ 编辑基线信息"):
             patient = next((p for p in st.session_state.patients if p["患者姓名"] == selected_patient_name), None)
@@ -1534,7 +1546,7 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
                     st.session_state.last_patient = base_data
                 st.balloons()
-                st.session_state.selected_patient = "+ 新增患者"
+                st.session_state.form_reset = True
                 st.rerun()
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
