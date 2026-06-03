@@ -1474,6 +1474,61 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
                 st.balloons()
 
+            # 保存到 Google Sheets
+            save_data = st.session_state.last_patient.copy()
+            if "随访记录" in save_data and isinstance(save_data["随访记录"], list) and save_data["随访记录"]:
+                latest = save_data["随访记录"][-1]
+                save_data["最新随访FPG"] = latest.get("干预后FPG", "")
+                save_data["最新随访PG30"] = latest.get("干预后PG30", "")
+                save_data["最新随访PG60"] = latest.get("干预后PG60", "")
+                save_data["最新随访PG120"] = latest.get("干预后PG120", "")
+                save_data["最新随访PG180"] = latest.get("干预后PG180", "")
+            else:
+                for k in ["最新随访FPG", "最新随访PG30", "最新随访PG60", "最新随访PG120", "最新随访PG180"]:
+                    save_data[k] = ""
+            # 将干预前体感子项转为 JSON 字符串，避免被 flatten_dict 展开
+            if "干预前体感子项" in save_data and isinstance(save_data["干预前体感子项"], dict):
+                save_data["干预前体感子项"] = json.dumps(save_data["干预前体感子项"], ensure_ascii=False)
+            if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
+                save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
+            if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
+                save_to_google_sheets(save_data)
+            else:
+                st.info("💡 提示：待云端系统配置完成，数据将自动云端汇总")
+            st.balloons()
+
+    # ===== AI 方案建议 =====
+    if st.session_state.get("last_patient"):
+        st.markdown("---")
+        st.subheader("🤖 AI 智能方案建议")
+        patient_for_plan = st.session_state.last_patient
+        st.write(f"当前患者：**{patient_for_plan.get('患者姓名', '未知')}**")
+        if st.button("生成个体化营养治疗方案", key="gen_plan_btn"):
+            with st.spinner("正在分析..."):
+                try:
+                    plan = generate_plan(patient_for_plan)
+                    st.session_state.ai_plan = plan
+                    # 将方案存入当前患者数据
+                    patient_for_plan["AI方案"] = plan
+                    # 自动保存到 Google Sheets（不新增随访记录）
+                    #if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
+                        # 注意：随访记录必须转为 JSON 字符串再保存
+                        #save_data = patient_for_plan.copy()
+                        #if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
+                            #save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
+                        #save_to_google_sheets(save_data)
+                        #st.success("✅ 方案已自动同步至云端")
+                except Exception as e:
+                    st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
+        if st.session_state.get("ai_plan"):
+            st.text_area("AI 建议", value=st.session_state.ai_plan, height=600)
+
+    
+    #if st.button("🔄 重建知识库（更新 PDF 后使用）"):
+    #    load_knowledge_base.clear()   # 清除缓存
+    #    st.cache_resource.clear()     # 清除所有资源缓存（可选，更彻底）
+    #    st.rerun()
+
     # ===== 图表分析（与原来基本相同，仅增加随访编辑入口） =====
     if selected_patient_data and selected_patient_name != "+ 新增患者":
         patient = selected_patient_data
