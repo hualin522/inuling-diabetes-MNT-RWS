@@ -247,7 +247,12 @@ def flatten_dict(d, parent_key='', sep='_'):
         if isinstance(v, dict):
             items.extend(flatten_dict(v, new_key, sep=sep).items())
         elif isinstance(v, list):
-            items.append((new_key, str(v)))
+            # 使用 JSON 序列化，自定义日期转换
+            def json_serial(obj):
+                if isinstance(obj, (date, datetime)):
+                    return obj.isoformat()
+                raise TypeError(f"Type {type(obj)} not serializable")
+            items.append((new_key, json.dumps(v, default=json_serial, ensure_ascii=False)))
         elif isinstance(v, (date, datetime)):
             items.append((new_key, v.isoformat()))
         elif v is None:
@@ -1562,7 +1567,7 @@ def patient_info_entry():
                     plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
                     # 可选：将方案存入患者数据
-                    patient_for_plan["AI方案"] = plan
+                    #patient_for_plan["AI方案"] = plan
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
