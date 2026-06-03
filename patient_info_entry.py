@@ -1510,6 +1510,7 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
                     selected_patient_data = base_data
                 st.balloons()
+                st.rerun()   # ← 提交后自动刷新，清空表单并更新界面
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
     if selected_patient_data:
@@ -1626,7 +1627,7 @@ def patient_info_entry():
             fig.add_hline(y=16.7, line_dash="dash", line_color="darkred",
                         annotation_text="高风险警示线 (16.7)", annotation_position="top right")
             all_vals = [v for v in pre_vals + post_vals if v is not None]
-            y_max = max(all_vals) if all_vals else 12
+            y_max = max(all_vals) if all_vals else 20
             y_min = min(all_vals) if all_vals else 0
             y_max = max(y_max, 16.7)  # 保证警示线可见
             fig.update_layout(
@@ -1722,7 +1723,7 @@ def patient_info_entry():
                 all_vals = []
                 if all(pre_values): all_vals.extend(pre_values)
                 for _, _, vals in valid_followups: all_vals.extend(vals)
-                y_max = max(all_vals) if all_vals else 12
+                y_max = max(all_vals) if all_vals else 20
                 y_min = min(all_vals) if all_vals else 0
                 y_max = max(y_max, 16.7)   # 保证高风险线可见
                 fig.update_layout(
