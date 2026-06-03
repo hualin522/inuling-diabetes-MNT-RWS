@@ -716,7 +716,7 @@ def patient_info_entry():
     if "disease_manual" not in st.session_state:
         st.session_state.disease_manual = 0.0
 
-    with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
+    with st.form(key="patient_form", clear_on_submit=True, enter_to_submit=False):
         # 知情同意书
         with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=True):
             st.markdown("""
@@ -1532,7 +1532,6 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
                     selected_patient_data = base_data
                 st.balloons()
-                st.rerun()   # ← 提交后自动刷新，清空表单并更新界面
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
     if selected_patient_data:
