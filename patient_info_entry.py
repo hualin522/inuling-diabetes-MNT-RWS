@@ -1474,29 +1474,6 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
                 st.balloons()
 
-            # 保存到 Google Sheets
-            save_data = st.session_state.last_patient.copy()
-            if "随访记录" in save_data and isinstance(save_data["随访记录"], list) and save_data["随访记录"]:
-                latest = save_data["随访记录"][-1]
-                save_data["最新随访FPG"] = latest.get("干预后FPG", "")
-                save_data["最新随访PG30"] = latest.get("干预后PG30", "")
-                save_data["最新随访PG60"] = latest.get("干预后PG60", "")
-                save_data["最新随访PG120"] = latest.get("干预后PG120", "")
-                save_data["最新随访PG180"] = latest.get("干预后PG180", "")
-            else:
-                for k in ["最新随访FPG", "最新随访PG30", "最新随访PG60", "最新随访PG120", "最新随访PG180"]:
-                    save_data[k] = ""
-            # 将干预前体感子项转为 JSON 字符串，避免被 flatten_dict 展开
-            if "干预前体感子项" in save_data and isinstance(save_data["干预前体感子项"], dict):
-                save_data["干预前体感子项"] = json.dumps(save_data["干预前体感子项"], ensure_ascii=False)
-            if "随访记录" in save_data and isinstance(save_data["随访记录"], list):
-                save_data["随访记录"] = json.dumps(save_data["随访记录"], ensure_ascii=False, default=str)
-            if "gcp_service_account" in st.secrets and "google_sheets" in st.secrets:
-                save_to_google_sheets(save_data)
-            else:
-                st.info("💡 提示：待云端系统配置完成，数据将自动云端汇总")
-            st.balloons()
-
     # ===== AI 方案建议 =====
     if st.session_state.get("last_patient"):
         st.markdown("---")
