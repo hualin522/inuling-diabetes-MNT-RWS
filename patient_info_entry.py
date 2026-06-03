@@ -716,7 +716,7 @@ def patient_info_entry():
     if "disease_manual" not in st.session_state:
         st.session_state.disease_manual = 0.0
 
-    with st.form(key="patient_form", clear_on_submit=True, enter_to_submit=False):
+    with st.form(key="patient_form", clear_on_submit=False, enter_to_submit=False):
         # 知情同意书
         with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=True):
             st.markdown("""
@@ -1447,9 +1447,11 @@ def patient_info_entry():
                             selected_patient_data["随访记录"].append(new_followup)
                             st.success(f"✅ 已为 {selected_patient_name} 添加新的随访记录")
                             update_patient_in_sheets(selected_patient_data)
+                            st.session_state.last_patient = selected_patient_data
                     else:
                         st.info("📝 未填写任何干预后数据，仅更新基线信息（如有修改）。")
                         update_patient_in_sheets(selected_patient_data)
+                        st.session_state.last_patient = selected_patient_data
                     # 更新本地列表
                     for i, p in enumerate(st.session_state.patients):
                         if p.get("患者ID") == selected_patient_data.get("患者ID"):
@@ -1530,22 +1532,25 @@ def patient_info_entry():
                         st.success(f"✅ 患者 {name} 已新增并录入首次随访数据")
                     else:
                         st.success(f"✅ 患者 {name} 的基线信息已保存，干预后数据待下次录入")
-                    selected_patient_data = base_data
+                    st.session_state.last_patient = base_data
                 st.balloons()
+                st.session_state.selected_patient = "+ 新增患者"
+                st.rerun()
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
-    if selected_patient_data:
+    # 优先使用最后一次提交的患者，若不存在则使用当前下拉框选择的患者
+    patient_for_plan = st.session_state.get("last_patient") or selected_patient_data
+    if patient_for_plan:
         st.markdown("---")
         st.subheader("🤖 AI 智能方案建议")
-        st.write(f"当前患者：**{selected_patient_data.get('患者姓名', '未知')}**")
+        st.write(f"当前患者：**{patient_for_plan.get('患者姓名', '未知')}**")
         if st.button("生成个体化营养治疗方案", key="gen_plan_btn"):
             with st.spinner("正在分析..."):
                 try:
-                    plan = generate_plan(selected_patient_data)
+                    plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
-                    # 可选：将方案存入患者数据并同步云端（非强制）
-                    selected_patient_data["AI方案"] = plan
-                    # update_patient_in_sheets(selected_patient_data)  # 如需保存方案可取消注释
+                    # 可选：将方案存入患者数据
+                    patient_for_plan["AI方案"] = plan
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
