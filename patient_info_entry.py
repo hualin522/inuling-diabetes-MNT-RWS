@@ -622,7 +622,7 @@ def generate_plan(patient_combined_data: dict) -> str:
 # 主界面
 # ============================================
 def patient_info_entry():
-    st.header("📋 《英纽林糖尿病医学营养治疗真实世界研究》案例收集")
+    st.header("📋 《糖尿病医学营养治疗真实世界研究》案例收集")
 
     query_params = st.query_params
     submitter_id = query_params.get("submitter_id", None)
@@ -712,6 +712,36 @@ def patient_info_entry():
                 if is_admin or p.get("提交者ID") == submitter_id:
                     selected_patient_data = p
                     break
+                
+                # ==================== 新增：项目类型回填逻辑 ====================
+    if selected_patient_data:
+        stored_project = selected_patient_data.get("项目/医疗地区", "")
+        # 确定期望的项目类型和自定义文本
+        if stored_project in ["医疗", "合作项目", "金顶", "赢创"]:
+            expected_type = stored_project
+            expected_custom = ""
+        elif stored_project and stored_project.strip():
+            expected_type = "其他"
+            expected_custom = stored_project
+        else:
+            expected_type = "医疗"
+            expected_custom = ""
+
+        # 获取当前 session_state 中的值
+        current_type = st.session_state.get("project_type_select", "医疗")
+        current_custom = st.session_state.get("project_custom_input", "")
+
+        # 仅在需要更新时执行
+        if current_type != expected_type or current_custom != expected_custom:
+            st.session_state.project_type_select = expected_type
+            st.session_state.project_custom_input = expected_custom
+            # 同步 current_project_region，确保后续提交使用正确值
+            if expected_type == "其他":
+                st.session_state.current_project_region = expected_custom
+            else:
+                st.session_state.current_project_region = expected_type
+            st.rerun()
+    # ==============================================================
 
     # 表单默认值来源（优先级：编辑数据 > 已有患者数据 > 空）
     default_patient = None
@@ -719,6 +749,46 @@ def patient_info_entry():
         default_patient = st.session_state.edit_target_patient
     else:
         default_patient = selected_patient_data
+    
+    # ===== 项目类型选择（位于表单外部，可实时联动） =====
+    st.subheader("📌 项目类型与案例来源")
+    col_proj1, col_proj2 = st.columns([1, 2])
+    with col_proj1:
+        project_type = st.selectbox(
+            "项目类型",
+            ["医疗", "合作项目", "金顶", "赢创", "其他"],
+            key="project_type_select"
+        )
+    with col_proj2:
+        project_custom = st.text_input(
+            "如果选择“其他”，请填写具体项目名称",
+            value=st.session_state.get("project_custom", ""),
+            key="project_custom_input"
+        )
+
+    # 确定最终的项目区域标识
+    if project_type == "其他":
+        current_project_region = project_custom.strip()
+    else:
+        current_project_region = project_type
+    st.session_state["current_project_region"] = current_project_region
+
+    # 根据项目类型动态生成营养产品选项列表
+    def get_product_options(project_region):
+        if project_region == "医疗":
+            return ["畅快", "纽畅", "纽畅B", "其他营养治疗"]
+        elif project_region == "合作项目":
+            return ["清畅", "唐畅", "唐畅B", "其他营养治疗"]
+        elif project_region == "金顶":
+            return ["清谷夫", "唐平匠", "唐来匠", "其他营养治疗"]
+        elif project_region == "赢创":
+            return ["益比特畅清", "益比特修畅元", "益比特修夷稳", "其他营养治疗"]                
+        else:
+            # 自定义项目或未匹配，提供通用选项（沿用原有带斜杠的展示方式）
+            return ["畅快/清畅", "纽畅/唐畅", "纽畅B/唐畅B", "其他营养治疗"]
+
+    product_options = get_product_options(current_project_region)
+    st.markdown("---")
 
     st.subheader("基本信息输入方式")
     col_mode1, col_mode2 = st.columns(2)
@@ -794,23 +864,6 @@ def patient_info_entry():
         with st.expander("2️⃣ 案例来源 & 备注", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
-                predefined_options = ["医疗", "合作项目", "其他"]
-                current_val = default_patient.get("项目/医疗地区", "") if default_patient else ""
-                if current_val in predefined_options:
-                    dropdown_val = current_val
-                    custom_text = ""
-                elif current_val:
-                    dropdown_val = "其他"
-                    custom_text = current_val
-                else:
-                    dropdown_val = "医疗"
-                    custom_text = ""
-                project_dropdown = st.selectbox("项目类型", options=predefined_options, index=predefined_options.index(dropdown_val), key="project_dropdown")
-                project_custom = st.text_input("如选择“其他”，请填写具体项目名称", value=custom_text, key="project_custom")
-                if project_dropdown == "其他":
-                    project_region = project_custom.strip()
-                else:
-                    project_region = project_dropdown
                 health_coach = st.text_input("健管师", value=default_patient.get("健管师", "") if default_patient else "", key="health_coach")
                 doctor = st.text_input("医生", value=default_patient.get("医生", "") if default_patient else "", key="doctor")
                 clinic_name = st.text_input("诊所/门店名称", value=default_patient.get("诊所/门店名称", "") if default_patient else "", key="clinic_name")
@@ -1201,8 +1254,12 @@ def patient_info_entry():
                 )
         # 干预方案与使用反馈
         with st.expander("5️⃣ 干预方案与使用反馈", expanded=False):
-            intervention_products = st.multiselect("营养治疗产品（可多选）", ["畅快/清畅", "纽畅/唐畅", "纽畅B/唐畅B", "其他营养治疗"],
-                                                  default=default_followup.get("干预方案产品", []) if default_followup else [])
+            # 动态产品选项
+            intervention_products = st.multiselect(
+                "营养治疗产品（可多选）",
+                options=product_options,
+                default=default_followup.get("干预方案产品", []) if default_followup else []
+            )
             other_product_name = ""
             if "其他营养治疗" in intervention_products:
                 other_product_name = st.text_input("请输入‘其他营养治疗’的具体名称", key="other_product_name")
@@ -1269,6 +1326,8 @@ def patient_info_entry():
             followup_time = datetime.now().strftime("%Y-%m-%d %H:%M")
             if post_glyc_date is not None:
                 followup_time = post_glyc_date.isoformat()
+            
+            project_region = st.session_state.get("current_project_region", "医疗")
 
             new_followup = {
                 "随访时间": followup_time,
