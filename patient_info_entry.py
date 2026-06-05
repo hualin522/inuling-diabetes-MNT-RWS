@@ -815,7 +815,7 @@ def patient_info_entry():
         # 知情同意书
         with st.expander("📜 知情同意书（请阅读后勾选同意）", expanded=True):
             st.markdown("""
-            **《英纽林糖尿病医学营养治疗真实世界研究》案例收集项目**
+            **《糖尿病医学营养治疗（MNT)真实世界研究》案例收集项目**
 
             尊敬的参与者：
 
