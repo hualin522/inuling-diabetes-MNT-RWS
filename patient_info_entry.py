@@ -116,14 +116,22 @@ def parse_other_meds(meds_text):
             line = line.strip()
             if not line:
                 continue
+            # 支持中英文逗号
             parts = line.replace('，', ',').split(',')
-            if len(parts) >= 3:
+            if len(parts) >= 1:
                 name = parts[0].strip()
-                try:
-                    times = float(parts[1].strip())
-                    dose = float(parts[2].strip())
-                except ValueError:
-                    times, dose = 0, 0
+                times = 0
+                dose = 0
+                if len(parts) >= 2:
+                    try:
+                        times = float(parts[1].strip())
+                    except:
+                        pass
+                if len(parts) >= 3:
+                    try:
+                        dose = float(parts[2].strip())
+                    except:
+                        pass
                 meds_list.append({"药名": name, "每天次数": times, "每次剂量": dose})
             else:
                 st.warning(f"其他药物格式有误：{line}，已忽略")
@@ -995,6 +1003,7 @@ def patient_info_entry():
                                                         value=safe_float(default_patient.get("干预前阿卡波糖剂量/次")) if default_patient else None,
                                                         key="pre_acb_dose", disabled=pre_disabled)
                 with col3:
+                    st.caption("每行格式：药名,每天次数,每次剂量（例如：格列本脲,2,500），次数和剂量可省略")
                     pre_other_meds = st.text_area("其他药物", value="" if not default_patient else "", placeholder="每行：药名，每天次数，每次剂量",
                                                 key="pre_other_meds", disabled=pre_disabled)
 
@@ -1186,6 +1195,7 @@ def patient_info_entry():
                                                         value=safe_float(default_followup.get("干预后阿卡波糖剂量/次")) if default_followup else None,
                                                         key="post_acb_dose")
                 with col3:
+                    st.caption("每行格式：药名,每天次数,每次剂量（例如：格列本脲,2,500），次数和剂量可省略")
                     post_other_meds = st.text_area("其他药物", value="", placeholder="每行：药名，每天次数，每次剂量",
                                                 key="post_other_meds")
 
