@@ -1290,8 +1290,8 @@ def patient_info_entry():
             with col2:
                 drug_post_date = st.date_input("干预后日期", value=safe_date(default_followup.get("用药调整干预后日期")) if default_followup else None, min_value=date(1900,1,1), key="drug_post_date")
                 drug_post_med = st.text_area("干预后用药 (可简述)", value=default_followup.get("用药调整干预后用药", "") if default_followup else "", key="drug_post_med")
-            drug_reduction = st.selectbox("减药/停药", ["无变化", "减剂量", "减种类", "停用所有口服", "其他"],
-                                         index=["无变化", "减剂量", "减种类", "停用所有口服", "其他"].index(default_followup.get("减药/停药情况", "无变化")) if default_followup else 0, key="drug_reduction")
+            drug_reduction = st.selectbox("减药/停药", ["无变化", "减剂量", "减种类", "停用胰岛素", "停用所有口服药", "停用所有糖尿病药物", "其他"],
+                                         index=["无变化", "减剂量", "减种类", "停用胰岛素", "停用所有口服药", "停用所有糖尿病药物", "其他"].index(default_followup.get("减药/停药情况", "无变化")) if default_followup else 0, key="drug_reduction")
 
 
 
