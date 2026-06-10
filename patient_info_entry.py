@@ -412,6 +412,20 @@ def load_patients_from_sheets(submitter_id=None):
                     for nf in numeric_fields:
                         if nf in record:
                             record[nf] = safe_float(record[nf])
+                    # 反序列化随访记录中的体感子项（与顶层干预前体感子项逻辑一致）
+                    if "干预后体感子项" in record and isinstance(record["干预后体感子项"], str):
+                        try:
+                            record["干预后体感子项"] = json.loads(record["干预后体感子项"])
+                        except:
+                            record["干预后体感子项"] = {}
+                    if not isinstance(record.get("干预后体感子项"), dict):
+                        rebuilt_post = {}
+                        for item in symptom_items:
+                            flat_key = f"干预后体感子项_{item}"
+                            if flat_key in record:
+                                rebuilt_post[item] = safe_float(record[flat_key])
+                        if rebuilt_post:
+                            record["干预后体感子项"] = rebuilt_post
             filtered_data.append(row)
         patient_map = {}
         for row in filtered_data:
@@ -720,6 +734,130 @@ def patient_info_entry():
                 if is_admin or p.get("提交者ID") == submitter_id:
                     selected_patient_data = p
                     break
+    
+        # 在获取 selected_patient_data 之后，添加以下同步逻辑
+    if selected_patient_data and selected_patient_name != "+ 新增患者" and st.session_state.edit_mode != "baseline":
+        # 避免重复同步（根据患者ID判断）
+        current_patient_id = selected_patient_data.get("患者ID")
+        last_synced_id = st.session_state.get("last_synced_pre_patient_id")
+        if current_patient_id != last_synced_id:
+            # 定义干预前字段到 session_state key 的映射
+            pre_field_mapping = {
+                # 基本指标
+                "pre_h": ("干预前身高", safe_float),
+                "pre_w": ("干预前体重", safe_float),
+                "pre_wc": ("干预前腰围", safe_float),
+                "pre_hc": ("干预前臀围", safe_float),
+                "pre_sbp": ("干预前高压", safe_float),
+                "pre_dbp": ("干预前低压", safe_float),
+                # 五点血糖
+                "pre_fpg": ("干预前FPG", safe_float),
+                "pre_pg30": ("干预前PG30", safe_float),
+                "pre_pg60": ("干预前PG60", safe_float),
+                "pre_pg120": ("干预前PG120", safe_float),
+                "pre_pg180": ("干预前PG180", safe_float),
+                # 生化
+                "pre_hba1c": ("干预前糖化", safe_float),
+                "pre_tg": ("干预前TG", safe_float),
+                "pre_tc": ("干预前TC", safe_float),
+                "pre_ldl": ("干预前LDL", safe_float),
+                "pre_hdl": ("干预前HDL", safe_float),
+                "pre_alt": ("干预前ALT", safe_float),
+                "pre_ast": ("干预前AST", safe_float),
+                # 胰岛素
+                "pre_ins_times": ("干预前胰岛素次/天", safe_float),
+                "pre_ins_dose": ("干预前胰岛素剂量/次", safe_float),
+                "pre_insulin_type": ("干预前胰岛素种类", str),
+                # 口服药
+                "pre_met_times": ("干预前二甲双胍天/次", safe_float),
+                "pre_met_dose": ("干预前二甲双胍剂量/次", safe_float),
+                "pre_acb_times": ("干预前阿卡波糖天/次", safe_float),
+                "pre_acb_dose": ("干预前阿卡波糖剂量/次", safe_float),
+                # 7点血糖
+                "pre_bf_before": ("干预前早餐前", safe_float),
+                "pre_bf_after": ("干预前早餐后2h", safe_float),
+                "pre_lunch_before": ("干预前午餐前", safe_float),
+                "pre_lunch_after": ("干预前午餐后2h", safe_float),
+                "pre_dinner_before": ("干预前晚餐前", safe_float),
+                "pre_dinner_after": ("干预前晚餐后2h", safe_float),
+                "pre_bed": ("干预前睡前", safe_float),
+                # 日期字段
+                "pre_glyc_date": ("干预前5点日期", safe_date),
+                "pre_bio_date": ("干预前生化日期", safe_date),
+                "pre_7_date": ("干预前7点日期", safe_date),
+                "symptom_pre_date": ("干预前体感日期", safe_date),
+                "drug_pre_date": ("用药调整干预前日期", safe_date),
+                # 文本字段
+                "drug_pre_med": ("用药调整干预前用药", str),
+                "pre_discomfort": ("干预前身体不适", str),
+            }
+            # 批量同步标量字段
+            for key, (field, converter) in pre_field_mapping.items():
+                value = selected_patient_data.get(field)
+                if converter is safe_float:
+                    value = safe_float(value)
+                elif converter is safe_date:
+                    value = safe_date(value)
+                elif converter is str and value is None:
+                    value = ""
+                st.session_state[key] = value
+
+            # 同步体感子项（嵌套字典）
+            pre_symptom = selected_patient_data.get("干预前体感子项", {})
+            symptom_keys = {
+                "pre_hal": "口臭", "pre_def": "排便情况", "pre_gi": "胃肠道",
+                "pre_num": "四肢麻木", "pre_pru": "皮肤瘙痒", "pre_sleep": "睡眠",
+                "pre_vis": "视物", "pre_fat": "乏力", "pre_polyd": "多饮",
+                "pre_polyp": "多食", "pre_polyu": "多尿", "pre_lumb": "腰膝酸软",
+                "pre_night": "盗汗情况", "pre_mood": "情绪状况"
+            }
+            for skey, symptom_name in symptom_keys.items():
+                st.session_state[skey] = pre_symptom.get(symptom_name)
+
+            # 同步其他药物（将列表转换为多行文本）
+            other_meds = selected_patient_data.get("干预前其他药物", [])
+            if other_meds and isinstance(other_meds, list):
+                lines = []
+                for med in other_meds:
+                    if isinstance(med, dict):
+                        name = med.get("药名", "")
+                        times = med.get("每天次数", "")
+                        dose = med.get("每次剂量", "")
+                        lines.append(f"{name},{times},{dose}".rstrip(','))
+                st.session_state.pre_other_meds = "\n".join(lines)
+            else:
+                st.session_state.pre_other_meds = ""
+
+            # 同步基本信息（这些字段可能未禁用，但保持一致性）
+            st.session_state.birth = safe_date(selected_patient_data.get("出生日期"))
+            st.session_state.diag = safe_date(selected_patient_data.get("确诊日期"))
+            st.session_state.age_manual = safe_float(selected_patient_data.get("年龄"))
+            st.session_state.disease_manual = safe_float(selected_patient_data.get("病史年"))
+            # 其他文本字段
+            st.session_state.location = selected_patient_data.get("所在地", "")
+            st.session_state.complications = selected_patient_data.get("并发症", "")
+            st.session_state.other_chronic = selected_patient_data.get("其他慢病", "")
+            st.session_state.health_coach = selected_patient_data.get("健管师", "")
+            st.session_state.doctor = selected_patient_data.get("医生", "")
+            st.session_state.clinic_name = selected_patient_data.get("诊所/门店名称", "")
+            st.session_state.submitter = selected_patient_data.get("提交人", "")
+            st.session_state.supervisor = selected_patient_data.get("指导健管师", "")
+            st.session_state.remarks = selected_patient_data.get("备注", "")
+            # 记录已同步的患者ID
+            st.session_state.last_synced_pre_patient_id = current_patient_id
+
+    # 当选择“新增患者”时，清空干预前相关session_state（可选）
+    if selected_patient_name == "+ 新增患者" and st.session_state.edit_mode != "baseline":
+        # 清除所有以 pre_ 开头的 session_state 键
+        keys_to_clear = [k for k in st.session_state.keys() if k.startswith("pre_")]
+        for k in keys_to_clear:
+            st.session_state[k] = None
+        # 也清除基本信息键
+        st.session_state.birth = None
+        st.session_state.diag = None
+        st.session_state.age_manual = 0
+        st.session_state.disease_manual = 0.0
+        st.session_state.last_synced_pre_patient_id = None
                 
                 # ==================== 新增：项目类型回填逻辑 ====================
     if selected_patient_data:
@@ -1067,7 +1205,7 @@ def patient_info_entry():
                     "干预前身体不适情况",
                     value=selected_patient_data.get("干预前身体不适", "") if selected_patient_data else "",
                     key="pre_discomfort",
-                    disabled=selected_patient_data is not None,
+                    disabled=pre_disabled,
                     placeholder="请描述患者当前的主观不适，如头晕、乏力、口渴等……",
                     height=100
                 )
@@ -1196,7 +1334,22 @@ def patient_info_entry():
                                                         key="post_acb_dose")
                 with col3:
                     st.caption("每行格式：药名,每天次数,每次剂量（例如：格列本脲,2,500），次数和剂量可省略")
-                    post_other_meds = st.text_area("其他药物", value="", placeholder="每行：药名，每天次数，每次剂量",
+                    # 将列表格式转回多行文本（与干预前同步逻辑一致）
+                    _post_other_val = ""
+                    if default_followup:
+                        _raw = default_followup.get("干预后其他药物", "")
+                        if isinstance(_raw, list):
+                            _lines = []
+                            for _med in _raw:
+                                if isinstance(_med, dict):
+                                    _n = _med.get("药名", "")
+                                    _t = _med.get("每天次数", "")
+                                    _d = _med.get("每次剂量", "")
+                                    _lines.append(f"{_n},{_t},{_d}".rstrip(','))
+                            _post_other_val = "\n".join(_lines)
+                        elif isinstance(_raw, str):
+                            _post_other_val = _raw
+                    post_other_meds = st.text_area("其他药物", value=_post_other_val, placeholder="每行：药名，每天次数，每次剂量",
                                                 key="post_other_meds")
 
             with st.expander("生化指标", expanded=False):
@@ -1257,7 +1410,7 @@ def patient_info_entry():
             with st.expander("身体不适描述", expanded=False):
                 post_discomfort = st.text_area(
                     "干预后身体不适情况",
-                    value=None,   # 干预后默认为空
+                    value=default_followup.get("干预后身体不适", "") if default_followup else "",
                     key="post_discomfort",
                     placeholder="请描述干预后身体不适的变化情况……",
                     height=100
@@ -1290,8 +1443,16 @@ def patient_info_entry():
             with col2:
                 drug_post_date = st.date_input("干预后日期", value=safe_date(default_followup.get("用药调整干预后日期")) if default_followup else None, min_value=date(1900,1,1), key="drug_post_date")
                 drug_post_med = st.text_area("干预后用药 (可简述)", value=default_followup.get("用药调整干预后用药", "") if default_followup else "", key="drug_post_med")
-            drug_reduction = st.selectbox("减药/停药", ["无变化", "减剂量", "减种类", "停用胰岛素", "停用所有口服药", "停用所有糖尿病药物", "其他"],
-                                         index=["无变化", "减剂量", "减种类", "停用胰岛素", "停用所有口服药", "停用所有糖尿病药物", "其他"].index(default_followup.get("减药/停药情况", "无变化")) if default_followup else 0, key="drug_reduction")
+            drug_reduction_options = ["无变化", "减剂量", "减种类", "停用胰岛素", "停用所有口服药", "停用所有糖尿病药物", "其他"]
+            drug_reduction_index = 0
+            if default_followup:
+                stored_val = default_followup.get("减药/停药情况", "无变化")
+                try:
+                    drug_reduction_index = drug_reduction_options.index(stored_val)
+                except ValueError:
+                    drug_reduction_index = 0
+            drug_reduction = st.selectbox("减药/停药", drug_reduction_options,
+                                         index=drug_reduction_index, key="drug_reduction")
 
 
 
@@ -1333,7 +1494,7 @@ def patient_info_entry():
                 idx = final_products.index("其他营养治疗")
                 final_products[idx] = other_product_name.strip()
 
-            followup_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+            followup_time = datetime.now().strftime("%Y-%m-%d")
             if post_glyc_date is not None:
                 followup_time = post_glyc_date.isoformat()
             
@@ -1535,8 +1696,7 @@ def patient_info_entry():
                             update_patient_in_sheets(selected_patient_data)
                             st.session_state.last_patient = selected_patient_data
                     else:
-                        st.info("📝 未填写任何干预后数据，仅更新基线信息（如有修改）。")
-                        update_patient_in_sheets(selected_patient_data)
+                        st.info("📝 未填写任何干预后数据，无新增随访记录。可直接在下方查看图表分析或生成AI方案。")
                         st.session_state.last_patient = selected_patient_data
                     # 更新本地列表
                     for i, p in enumerate(st.session_state.patients):
