@@ -342,7 +342,25 @@ def update_patient_in_sheets(patient_dict):
 def load_patients_from_sheets(submitter_id=None):
     try:
         sheet = get_sheet()
-        all_data = sheet.get_all_records()
+        # 改用 get_all_values 手动解析，避免 get_all_records 在表头含重复空字符串时报错
+        all_values = sheet.get_all_values()
+        if not all_values or len(all_values) < 2:
+            return []
+        headers = all_values[0]
+        # 去重表头：重复名只保留首次出现，后续用 _n 后缀；空表头用 col_N 命名
+        seen = {}
+        uniq_headers = []
+        for i, h in enumerate(headers):
+            h = str(h).strip() if h is not None else ""
+            if not h:
+                h = f"col_{i}"
+            if h in seen:
+                seen[h] += 1
+                h = f"{h}_{seen[h]}"
+            else:
+                seen[h] = 0
+            uniq_headers.append(h)
+        all_data = [dict(zip(uniq_headers, row)) for row in all_values[1:]]
         if not all_data:
             return []
         if submitter_id:
