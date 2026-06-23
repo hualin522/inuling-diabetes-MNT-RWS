@@ -310,14 +310,14 @@ def save_to_google_sheets(patient_dict):
                 flat[col] = ""
         header_row = sheet.row_values(1)
         if not header_row or all(cell == '' for cell in header_row):
-            # 空表：写表头 + 第一行数据
+            # 空表：写表头 + 第一行数据（用 append_row 自动扩展网格）
             header_to_write = list(flat.keys())
             if len(header_to_write) > 130:
                 st.warning("字段过多，将截断部分字段")
                 header_to_write = header_to_write[:130]
-            sheet.update('A1', [header_to_write])
+            sheet.append_row(header_to_write)
             row_data = [flat.get(col, "") for col in header_to_write]
-            sheet.update('A2', [row_data])
+            sheet.append_row(row_data)
         else:
             # 补全表头：将 flat 中有但表头缺失的列批量追加到表头末尾
             existing = set(header_row)
@@ -336,10 +336,9 @@ def save_to_google_sheets(patient_dict):
                 header_row.extend(new_cols)
             # 严格按表头顺序构建行数据
             row_data = [flat.get(col, "") for col in header_row]
-            # 用 update 写入指定行，避免 append_row 的 table_range 偏移问题
-            all_values = sheet.get_all_values()
-            next_row = len(all_values) + 1
-            sheet.update(f'A{next_row}', [row_data])
+            # 用 append_row 追加到末尾（gspread 会自动扩展表格行数上限）
+            # 不用 update(A{next_row}) 因为可能超出 Google Sheets 当前网格上限
+            sheet.append_row(row_data)
         st.success("✅ 数据已同步至云端")
     except Exception as e:
         st.warning(f"⚠️ 云端写入失败（数据已保存在本地列表中）: {e}")
