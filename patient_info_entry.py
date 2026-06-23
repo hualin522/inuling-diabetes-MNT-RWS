@@ -1128,10 +1128,12 @@ def patient_info_entry():
         all_patient_names = list({p["患者姓名"] for p in st.session_state.patients if p.get("提交者ID") == submitter_id})
     patient_names = ["+ 新增患者"] + all_patient_names
 
-    # 根据 form_reset 标志动态设置 index
+    # 提交成功后的清场：重置选择标记，触发清空逻辑
+    # 使用 _last_patient_selection 避免后续重载重复清空已填数据
     if st.session_state.get("form_reset", False):
-        default_index = 0          # 强制选中“+ 新增患者”
+        default_index = 0          # 强制选中"+ 新增患者"
         st.session_state.form_reset = False   # 立即清除标志
+        st.session_state._last_patient_selection = "_force_clear_"
     else:
         default_index = None       # 保持之前的选择（记忆）
 
@@ -1272,13 +1274,17 @@ def patient_info_entry():
             # 记录已同步的患者ID
             st.session_state.last_synced_pre_patient_id = current_patient_id
 
-    # 当选择“新增患者”时，清空干预前相关session_state（可选）
-    if selected_patient_name == "+ 新增患者" and st.session_state.edit_mode != "baseline":
-        # 清除所有以 pre_ 开头的 session_state 键
+    # 当选到"新增患者"时，仅在首次切换时清空干预前相关 session_state
+    # 用 _last_patient_selection 标记避免每次重载都清空（会覆盖用户已填数据）
+    last_selection = st.session_state.get("_last_patient_selection", "")
+    just_switched_to_new = (selected_patient_name == "+ 新增患者"
+                            and last_selection != "+ 新增患者"
+                            and st.session_state.edit_mode != "baseline")
+    st.session_state._last_patient_selection = selected_patient_name
+    if just_switched_to_new:
         keys_to_clear = [k for k in st.session_state.keys() if k.startswith("pre_")]
         for k in keys_to_clear:
             st.session_state[k] = None
-        # 也清除基本信息键
         st.session_state.birth = None
         st.session_state.diag = None
         st.session_state.age_manual = 0
