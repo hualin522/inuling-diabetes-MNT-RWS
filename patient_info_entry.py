@@ -2207,7 +2207,7 @@ def patient_info_entry():
                     st.session_state.last_patient = base_data
                 st.balloons()
                 st.session_state.form_reset = True
-                st.rerun()
+                #st.rerun()
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
     # 优先使用最后一次提交的患者，若不存在则使用当前下拉框选择的患者
