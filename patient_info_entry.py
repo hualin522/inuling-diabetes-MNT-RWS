@@ -252,10 +252,8 @@ def flatten_dict(d, parent_key='', sep='_'):
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
-            items.extend(flatten_dict(v, new_key, sep=sep).items())
-        elif isinstance(v, list):
-            # 使用 JSON 序列化，自定义日期转换
+        if isinstance(v, (dict, list)):
+            # dict 和 list 均序列化为 JSON 字符串（与 Google Sheets 存储格式一致）
             def json_serial(obj):
                 if isinstance(obj, (date, datetime)):
                     return obj.isoformat()
@@ -481,7 +479,16 @@ def load_encrypted_assets():
         st.stop()
     return tmp_dir
 
+# 明文 prompts 覆盖路径：若存在则优先加载，便于在不重新加密 assets.enc.zip 的情况下
+# 测试修改后的 prompts（如新增的 prediction_template）。否则回退到加密包内的 prompts.py。
+PROMPTS_OVERRIDE_PATH = os.path.join(os.path.dirname(__file__), "encrypted_assets", "prompts_v2.py")
+
 def load_prompts():
+    if os.path.exists(PROMPTS_OVERRIDE_PATH):
+        spec = importlib.util.spec_from_file_location("prompts_v2", PROMPTS_OVERRIDE_PATH)
+        prompts = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(prompts)
+        return prompts
     tmp_dir = load_encrypted_assets()
     prompts_path = os.path.join(tmp_dir, "prompts.py")
     spec = importlib.util.spec_from_file_location("prompts", prompts_path)
@@ -492,6 +499,8 @@ def load_prompts():
 prompts = load_prompts()
 pre_templates = prompts.pre_templates
 post_templates = prompts.post_templates
+# 干预效果预测模板（基于相似患者结局）；若覆盖文件未提供则为 None，预测功能将优雅降级
+prediction_template = getattr(prompts, "prediction_template", None)
 
 @st.cache_resource
 def load_knowledge_base():
@@ -626,6 +635,29 @@ def generate_plan(patient_combined_data: dict) -> str:
     selected_products = patient_combined_data.get("干预方案产品文本", "未指定")
     intervention_detail = patient_combined_data.get("干预方案细节", "未填写")
 
+    # 干预前模式：检索相似患者，为模板第4部分提供数据
+    similar_ref = "（暂无相似患者数据）"
+    outcome_stats = "（暂无统计）"
+    if mode == "pre":
+        try:
+            similar = find_similar_patients(patient_combined_data, top_k=10)
+            if similar:
+                similar_ref = format_similar_patients_context(similar)
+                agg = _aggregate_similar_outcomes(similar)
+                agg_lines = []
+                for _label, _stats in agg.items():
+                    agg_lines.append(
+                        f"{_label}: n={_stats['n']}, 均值={_stats['mean']}, "
+                        f"中位数={_stats['median']}, 范围=[{_stats['min']}, {_stats['max']}]"
+                    )
+                outcome_stats = "\n".join(agg_lines) if agg_lines else "（结局数据不足）"
+            else:
+                similar_ref = "（未检索到含干预后结局数据的相似患者，请基于临床经验谨慎预测）"
+                outcome_stats = "（无）"
+        except Exception as _e:
+            similar_ref = f"（相似患者检索失败：{_e}，请基于临床经验预测）"
+            outcome_stats = "（无）"
+
     invoke_input = {
         "input": input_text,
         **base_data,
@@ -636,9 +668,403 @@ def generate_plan(patient_combined_data: dict) -> str:
         "selected_products": selected_products,
         "intervention_detail": intervention_detail,
         "history_followups": history_text,
+        "similar_patients_reference": similar_ref,
+        "outcome_statistics": outcome_stats,
     }
     result = rag_chain.invoke(invoke_input)
     return result["answer"]
+
+# ============================================
+# 相似患者检索与干预效果预测模块
+# ============================================
+# 设计说明：
+# 1. 从 Google Sheets 全量患者中检索与新患者"干预前"特征最相似的历史患者；
+# 2. 仅纳入至少有一次含干预后数据的随访记录的患者（作为效果预测的参照）；
+# 3. 数值特征按临床合理范围做 min-max 归一化至 [0,1]，消除量纲差异；
+# 4. 缺失维度采用 nan-aware 加权均方距离（只在双方均有值的维度上计算），
+#    避免缺失值偏置；
+# 5. 性别 / 项目地区作为类别特征，不匹配时施加固定惩罚；
+# 6. 检索过程对全量数据向量化（numpy 广播），数万条规模下毫秒级完成；
+#    特征矩阵随 similarity_pool 缓存在 session_state，仅在"刷新"时重建。
+# 注：不引入 FAISS——数万规模下 numpy 暴力检索已足够（<50ms），
+#     且免去了索引构建/重建的复杂度。若数据增长至 10 万+ 可再考虑 FAISS。
+
+# 数值特征：(字段名, 最小值, 最大值, 权重)
+NUMERIC_FEATURE_SPEC = [
+    ("年龄",              0, 100, 1.0),
+    ("病史年",            0, 40,  0.8),
+    ("干预前BMI",        15, 45,  1.0),
+    ("干预前FPG",         3, 25,  1.5),
+    ("干预前PG120",       3, 30,  1.5),
+    ("干预前糖化",        4, 15,  1.2),
+    ("干预前高压",       80, 250, 0.4),
+    ("干预前低压",       50, 150, 0.4),
+    ("干预前腰围",       50, 150, 0.6),
+    ("干预前TG",          0, 10,  0.3),
+    ("干预前TC",          2, 12,  0.3),
+    ("干预前LDL",         0, 8,   0.3),
+    ("干预前HDL",         0, 3,   0.3),
+    ("干预前ALT",         0, 500, 0.2),
+    ("干预前AST",         0, 500, 0.2),
+]
+
+# 体感子项（每项 1-10 分），归一化除以 10
+SYMPTOM_FEATURE_ITEMS = [
+    "口臭", "排便情况", "胃肠道", "四肢麻木", "皮肤瘙痒", "睡眠", "视物",
+    "乏力", "多饮", "多食", "多尿", "腰膝酸软", "盗汗情况", "情绪状况",
+]
+SYMPTOM_ITEM_WEIGHT = 0.12  # 14 项合计 ≈ 1.68（次要于血糖/人口学特征）
+
+# 类别特征不匹配惩罚（加到最终距离上）
+GENDER_MISMATCH_PENALTY = 1.0
+REGION_MISMATCH_PENALTY = 0.5
+
+
+def _sim_to_float(val):
+    """安全转 float，失败/空返回 None。"""
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _has_post_outcome(patient):
+    """判断患者是否含有可用的干预后结局数据（作为相似参照的前提）。"""
+    followups = patient.get("随访记录", [])
+    if not isinstance(followups, list) or not followups:
+        return False
+    for fu in followups:
+        if any(_sim_to_float(fu.get(k)) is not None for k in
+               ["干预后FPG", "干预后PG120", "干预后糖化", "干预后体重"]):
+            return True
+    return False
+
+
+def _extract_feature_vector(patient):
+    """
+    从单个患者字典抽取归一化特征向量与类别标记。
+    返回 (numeric_vec, symptom_vec, gender, region)：
+      - numeric_vec: 长度=len(NUMERIC_FEATURE_SPEC) 的 np.array，缺失填 np.nan
+      - symptom_vec: 长度=len(SYMPTOM_FEATURE_ITEMS) 的 np.array，缺失填 np.nan
+      - gender / region: 字符串
+    """
+    numeric = []
+    for name, lo, hi, _w in NUMERIC_FEATURE_SPEC:
+        raw = _sim_to_float(patient.get(name))
+        if raw is None:
+            numeric.append(np.nan)
+        else:
+            raw = min(max(raw, lo), hi)          # 夹逼到临床范围
+            numeric.append((raw - lo) / (hi - lo))
+    symptom_dict = patient.get("干预前体感子项", {}) or {}
+    if not isinstance(symptom_dict, dict):
+        symptom_dict = {}
+    symptom = []
+    for item in SYMPTOM_FEATURE_ITEMS:
+        raw = _sim_to_float(symptom_dict.get(item))
+        if raw is None:
+            symptom.append(np.nan)
+        else:
+            raw = min(max(raw, 0), 10)
+            symptom.append(raw / 10.0)
+    gender = str(patient.get("性别", "")).strip()
+    region = str(patient.get("项目/医疗地区", "")).strip()
+    return (np.array(numeric, dtype=float),
+            np.array(symptom, dtype=float), gender, region)
+
+
+def _build_feature_matrix(patients):
+    """
+    构建全量患者的特征矩阵（仅含可作为参照的患者）。
+    返回 (numeric_matrix, symptom_matrix, genders, regions, ref_indices)。
+    """
+    ref_indices = []
+    numeric_rows = []
+    symptom_rows = []
+    genders = []
+    regions = []
+    for i, p in enumerate(patients):
+        if not _has_post_outcome(p):
+            continue
+        n, s, g, r = _extract_feature_vector(p)
+        numeric_rows.append(n)
+        symptom_rows.append(s)
+        genders.append(g)
+        regions.append(r)
+        ref_indices.append(i)
+    if not ref_indices:
+        return (np.empty((0, len(NUMERIC_FEATURE_SPEC))),
+                np.empty((0, len(SYMPTOM_FEATURE_ITEMS))),
+                [], [], [])
+    return (np.vstack(numeric_rows), np.vstack(symptom_rows),
+            genders, regions, ref_indices)
+
+
+def _weighted_nan_distance(query_num, query_sym, mat_num, mat_sym,
+                           query_gender, query_region, genders, regions):
+    """
+    计算查询向量到矩阵每一行的加权距离（nan-aware）。
+    返回长度=矩阵行数的 np.array，越小越相似。
+    """
+    weights_num = np.array([w for *_x, w in NUMERIC_FEATURE_SPEC], dtype=float)
+    # 数值维度：只在双方均非 nan 的维度上计算加权均方差
+    if mat_num.shape[0] > 0:
+        q_num = query_num[np.newaxis, :]                 # (1, D)
+        diff2 = (mat_num - q_num) ** 2                    # (N, D)
+        valid = ~np.isnan(mat_num) & ~np.isnan(q_num)
+        weighted = weights_num[np.newaxis, :] * diff2
+        weighted = np.where(valid, weighted, 0.0)
+        sum_w = np.sum(weights_num[np.newaxis, :] * valid, axis=1)
+        sum_w[sum_w == 0] = np.nan                        # 全缺维度 → 后续过滤
+        dist_num2 = np.sum(weighted, axis=1) / sum_w      # 加权均方
+    else:
+        dist_num2 = np.array([])
+
+    # 体感维度：同法
+    w_sym = np.full(len(SYMPTOM_FEATURE_ITEMS), SYMPTOM_ITEM_WEIGHT, dtype=float)
+    if mat_sym.shape[0] > 0:
+        q_sym = query_sym[np.newaxis, :]
+        diff2s = (mat_sym - q_sym) ** 2
+        valid_s = ~np.isnan(mat_sym) & ~np.isnan(q_sym)
+        weighteds = w_sym[np.newaxis, :] * diff2s
+        weighteds = np.where(valid_s, weighteds, 0.0)
+        sum_ws = np.sum(w_sym[np.newaxis, :] * valid_s, axis=1)
+        sum_ws[sum_ws == 0] = np.nan
+        dist_sym2 = np.sum(weighteds, axis=1) / sum_ws
+    else:
+        dist_sym2 = np.array([])
+
+    # 合并数值与体感（两者均 nan-aware 均方，相加后开根）
+    if dist_num2.size > 0:
+        combined = (np.where(np.isnan(dist_num2), 0.0, dist_num2)
+                    + np.where(np.isnan(dist_sym2), 0.0, dist_sym2))
+        both_invalid = np.isnan(dist_num2) & np.isnan(dist_sym2)
+        combined = np.where(both_invalid, np.inf, combined)
+        dist = np.sqrt(combined)
+    else:
+        dist = np.array([])
+
+    # 类别惩罚
+    if dist.size > 0:
+        gender_pen = np.where(
+            np.array([bool(g) and g == query_gender for g in genders]),
+            0.0, GENDER_MISMATCH_PENALTY,
+        )
+        region_pen = np.where(
+            np.array([bool(r) and r == query_region for r in regions]),
+            0.0, REGION_MISMATCH_PENALTY,
+        )
+        dist = dist + gender_pen + region_pen
+    return dist
+
+
+def get_similarity_pool():
+    """获取（并缓存于 session_state）全量患者数据用于相似检索。"""
+    if not st.session_state.get("similarity_pool_loaded", False):
+        with st.spinner("正在加载全量患者数据用于相似患者检索（仅首次，约数秒）..."):
+            st.session_state.similarity_pool = load_patients_from_sheets(submitter_id=None)
+            st.session_state.similarity_pool_loaded = True
+    return st.session_state.similarity_pool
+
+
+def find_similar_patients(query_patient, top_k=10):
+    """
+    从缓存的全量患者池检索 top_k 最相似患者。
+    返回 list[dict]：每项含 patient / distance / similarity / rank。
+    """
+    pool = get_similarity_pool()
+    if not pool:
+        return []
+    num_mat, sym_mat, genders, regions, ref_idx = _build_feature_matrix(pool)
+    if not ref_idx:
+        return []
+    q_num, q_sym, q_g, q_r = _extract_feature_vector(query_patient)
+    dist = _weighted_nan_distance(q_num, q_sym, num_mat, sym_mat,
+                                  q_g, q_r, genders, regions)
+    valid_mask = np.isfinite(dist)
+    if not valid_mask.any():
+        return []
+    valid_indices = np.where(valid_mask)[0]
+    order = np.argsort(dist[valid_mask])
+    results = []
+    for rank, j in enumerate(order[:top_k], start=1):
+        real_j = valid_indices[j]
+        d = float(dist[real_j])
+        sim = 1.0 / (1.0 + d)                             # 距离→相似度 0~1
+        results.append({
+            "patient": pool[ref_idx[real_j]],
+            "distance": round(d, 4),
+            "similarity": round(sim, 4),
+            "rank": rank,
+        })
+    return results
+
+
+def _symptom_total(sd):
+    """计算体感子项总分。"""
+    if not isinstance(sd, dict):
+        return None
+    vals = [_sim_to_float(v) for v in sd.values()]
+    vals = [v for v in vals if v is not None]
+    return round(sum(vals), 1) if vals else None
+
+
+def _anon_patient_summary(patient, rank, distance, similarity):
+    """生成单个相似患者的脱敏摘要（不含姓名/电话）。"""
+    def fmt(v):
+        return "—" if v is None or v == "" else v
+    def delta(pre, post):
+        a = _sim_to_float(pre); b = _sim_to_float(post)
+        if a is None or b is None:
+            return "—"
+        return f"{b - a:+.1f}"
+    fu_list = patient.get("随访记录", []) or []
+    last_fu = fu_list[-1] if fu_list else {}
+    pre_sym = patient.get("干预前体感子项", {}) or {}
+    post_sym = last_fu.get("干预后体感子项", {}) or {}
+    pre_total = _symptom_total(pre_sym)
+    post_total = _symptom_total(post_sym)
+    lines = [
+        f"【相似患者 {rank}】 相似度={similarity:.2f}（距离={distance:.3f}）",
+        f"  基线: 性别={fmt(patient.get('性别'))}, 年龄={fmt(patient.get('年龄'))}岁, "
+        f"BMI={fmt(patient.get('干预前BMI'))}, 病史={fmt(patient.get('病史年'))}年, "
+        f"地区={fmt(patient.get('项目/医疗地区'))}",
+        f"  干预前血糖: FPG={fmt(patient.get('干预前FPG'))}, "
+        f"PG120={fmt(patient.get('干预前PG120'))}, 糖化={fmt(patient.get('干预前糖化'))}%",
+        f"  干预前血压: {fmt(patient.get('干预前高压'))}/{fmt(patient.get('干预前低压'))} mmHg, "
+        f"腰围={fmt(patient.get('干预前腰围'))}cm",
+        f"  干预前体感总分: {fmt(pre_total)}",
+        f"  并发症: {fmt(patient.get('并发症'))}; 其他慢病: {fmt(patient.get('其他慢病'))}",
+        f"  随访次数: {len(fu_list)}",
+    ]
+    if last_fu:
+        d_total = ("—" if pre_total is None or post_total is None
+                   else f"{post_total - pre_total:+.1f}")
+        lines.append(
+            f"  最近随访(干预后): 体重={fmt(last_fu.get('干预后体重'))}kg "
+            f"(Δ={delta(patient.get('干预前体重'), last_fu.get('干预后体重'))}kg), "
+            f"BMI={fmt(last_fu.get('干预后BMI'))}, "
+            f"FPG={fmt(last_fu.get('干预后FPG'))} "
+            f"(Δ={delta(patient.get('干预前FPG'), last_fu.get('干预后FPG'))}), "
+            f"PG120={fmt(last_fu.get('干预后PG120'))} "
+            f"(Δ={delta(patient.get('干预前PG120'), last_fu.get('干预后PG120'))}), "
+            f"糖化={fmt(last_fu.get('干预后糖化'))}% "
+            f"(Δ={delta(patient.get('干预前糖化'), last_fu.get('干预后糖化'))}%)"
+        )
+        lines.append(f"  干预后体感总分: {fmt(post_total)} (Δ={d_total})")
+        lines.append(f"  减药/停药: {fmt(last_fu.get('减药/停药情况'))}")
+        lines.append(f"  使用产品: {fmt(last_fu.get('干预方案产品文本'))}")
+    return "\n".join(lines)
+
+
+def format_similar_patients_context(similar_list):
+    """将相似患者列表格式化为 AI 上下文字符串。"""
+    if not similar_list:
+        return "（未检索到含干预后结局数据的相似患者）"
+    blocks = [_anon_patient_summary(item["patient"], item["rank"],
+                                    item["distance"], item["similarity"])
+              for item in similar_list]
+    header = f"共检索到 {len(similar_list)} 位相似患者（按相似度降序，已脱敏）：\n"
+    return header + "\n\n".join(blocks)
+
+
+def _aggregate_similar_outcomes(similar_list):
+    """汇总相似患者关键结局变化量(Δ=干预后-干预前)的统计量。"""
+    import statistics
+    keys = [
+        ("ΔFPG", "干预前FPG", "干预后FPG"),
+        ("ΔPG120", "干预前PG120", "干预后PG120"),
+        ("Δ糖化", "干预前糖化", "干预后糖化"),
+        ("Δ体重(kg)", "干预前体重", "干预后体重"),
+        ("ΔBMI", "干预前BMI", "干预后BMI"),
+        ("Δ腰围(cm)", "干预前腰围", "干预后腰围"),
+        ("Δ高压", "干预前高压", "干预后高压"),
+        ("Δ低压", "干预前低压", "干预后低压"),
+    ]
+    agg = {}
+    for label, pre_k, post_k in keys:
+        deltas = []
+        for item in similar_list:
+            p = item["patient"]
+            fu = (p.get("随访记录") or [None])
+            fu = fu[-1] if fu else {}
+            a = _sim_to_float(p.get(pre_k))
+            b = _sim_to_float(fu.get(post_k)) if fu else None
+            if a is not None and b is not None:
+                deltas.append(b - a)
+        if deltas:
+            agg[label] = {
+                "n": len(deltas),
+                "mean": round(statistics.mean(deltas), 2),
+                "median": round(statistics.median(deltas), 2),
+                "min": round(min(deltas), 2),
+                "max": round(max(deltas), 2),
+            }
+    return agg
+
+
+def predict_intervention_effect(new_patient, similar_patients):
+    """
+    基于相似患者的干预结局，调用 AI 预测新患者的干预效果。
+    返回 AI 生成的预测报告文本（直接 LLM 调用，不走 RAG 检索）。
+    """
+    if not similar_patients:
+        return ("❌ 未检索到含干预后结局数据的相似患者，无法进行效果预测。"
+                "建议先积累更多含干预后随访数据的案例。")
+    if prediction_template is None:
+        return "❌ 预测模板未加载，请检查 prompts_v2.py 是否包含 prediction_template。"
+    api_key = st.secrets.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return "❌ 未配置 DEEPSEEK_API_KEY。"
+
+    similar_context = format_similar_patients_context(similar_patients)
+    agg = _aggregate_similar_outcomes(similar_patients)
+    agg_lines = []
+    for label, stats in agg.items():
+        agg_lines.append(
+            f"{label}: n={stats['n']}, 均值={stats['mean']}, 中位数={stats['median']}, "
+            f"范围=[{stats['min']}, {stats['max']}]"
+        )
+    agg_text = "\n".join(agg_lines) if agg_lines else "（结局数据不足）"
+
+    def symptom_dict_to_str(sd):
+        if not sd or not isinstance(sd, dict):
+            return "无数据"
+        items = [f"{k}：{v}分" for k, v in sd.items() if _sim_to_float(v) is not None]
+        return "；".join(items) if items else "无数据"
+
+    prompt = ChatPromptTemplate.from_template(prediction_template)
+    llm = ChatDeepSeek(model="deepseek-chat", api_key=api_key, temperature=0.4)
+    chain = prompt | llm
+    invoke_input = {
+        "gender": new_patient.get("性别", "未知"),
+        "age": new_patient.get("年龄", "未知"),
+        "disease_years": new_patient.get("病史年", "未知"),
+        "region": new_patient.get("项目/医疗地区", "未知"),
+        "height": new_patient.get("干预前身高", "未知"),
+        "pre_weight": new_patient.get("干预前体重", "未知"),
+        "pre_bmi": new_patient.get("干预前BMI", "未知"),
+        "pre_waist": new_patient.get("干预前腰围", "未知"),
+        "pre_sbp": new_patient.get("干预前高压", "未知"),
+        "pre_dbp": new_patient.get("干预前低压", "未知"),
+        "pre_fpg": new_patient.get("干预前FPG", "未知"),
+        "pre_pg2h": new_patient.get("干预前PG120", "未知"),
+        "pre_hba1c": new_patient.get("干预前糖化", "未知"),
+        "pre_symptom_detail": symptom_dict_to_str(new_patient.get("干预前体感子项", {})),
+        "chronic": new_patient.get("其他慢病", "无"),
+        "complications": new_patient.get("并发症", "无"),
+        "similar_patients_reference": similar_context,
+        "outcome_statistics": agg_text,
+        "similar_count": len(similar_patients),
+    }
+    try:
+        resp = chain.invoke(invoke_input)
+        return resp.content
+    except Exception as e:
+        return f"❌ 预测生成失败：{e}"
+
 
 # ============================================
 # 主界面
@@ -1781,7 +2207,7 @@ def patient_info_entry():
                     st.session_state.last_patient = base_data
                 st.balloons()
                 st.session_state.form_reset = True
-                st.rerun()
+                #st.rerun()
 
     # ===== AI 方案建议（使用当前选中的患者数据） =====
     # 优先使用最后一次提交的患者，若不存在则使用当前下拉框选择的患者
