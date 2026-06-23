@@ -336,9 +336,16 @@ def save_to_google_sheets(patient_dict):
                 header_row.extend(new_cols)
             # 严格按表头顺序构建行数据
             row_data = [flat.get(col, "") for col in header_row]
-            # 用 append_row 追加到末尾（gspread 会自动扩展表格行数上限）
-            # 不用 update(A{next_row}) 因为可能超出 Google Sheets 当前网格上限
-            sheet.append_row(row_data)
+            # 用 update 写入精确行位置，确保列对齐
+            # append_row 依赖 gspread 自动检测表格范围，当某些列大量为空时
+            # 会从错误列开始写入导致数据错位
+            all_values = sheet.get_all_values()
+            next_row = len(all_values) + 1
+            # 若超出 Google Sheets 当前网格行数上限，先扩展网格
+            max_rows = sheet.row_count
+            if next_row > max_rows:
+                sheet.add_rows(next_row - max_rows)
+            sheet.update(f'A{next_row}', [row_data])
         st.success("✅ 数据已同步至云端")
     except Exception as e:
         st.warning(f"⚠️ 云端写入失败（数据已保存在本地列表中）: {e}")
