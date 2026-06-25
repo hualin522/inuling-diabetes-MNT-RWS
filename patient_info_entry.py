@@ -484,8 +484,8 @@ def load_encrypted_assets():
     return tmp_dir
 
 # 明文 prompts 覆盖路径：若存在则优先加载，便于在不重新加密 assets.enc.zip 的情况下
-# 测试修改后的 prompts（如新增的 prediction_template）。否则回退到加密包内的 prompts.py。
-PROMPTS_OVERRIDE_PATH = os.path.join(os.path.dirname(__file__), "encrypted_assets", "prompts_v2.py")
+# 测试修改后的 prompts。否则回退到加密包内的 prompts.py。
+PROMPTS_OVERRIDE_PATH = os.path.join(os.path.dirname(__file__), "encrypted_assets", "prompts.py")
 
 def load_prompts():
     if os.path.exists(PROMPTS_OVERRIDE_PATH):
@@ -1182,20 +1182,6 @@ def patient_info_entry():
     if st.button("🔄 重新加载云端数据"):
         st.session_state.loaded_from_cloud = False
         st.rerun()
-
-    # ML 预测模型状态
-    with st.sidebar:
-        with st.expander("🔬 ML 血糖预测模型"):
-            ml = load_ml_predictor()
-            if ml is not None:
-                meta = ml._meta or {}
-                st.success("✅ LightGBM 已就绪")
-                st.caption(f"FPG 模型: {meta.get('n_fpg', '?')} 例训练")
-                st.caption(f"PG120 模型: {meta.get('n_pg120', '?')} 例训练")
-                st.caption("精度: R²≈0.45, MAE≈1.06 mmol/L")
-            else:
-                st.warning("⚠ 模型未加载")
-                st.caption("请检查 glucose_model/ 目录")
 
     # 患者选择（按提交者ID过滤）
     if is_admin:

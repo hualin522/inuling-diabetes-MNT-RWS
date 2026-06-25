@@ -16,5 +16,5 @@ faiss-cpu
 pypdf
 torchvision
 pyzipper
-lightgbm>=3.3.0
-scikit-learn>=1.0
+lightgbm
+scikit-learn
