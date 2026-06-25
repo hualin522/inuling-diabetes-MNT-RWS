@@ -7,6 +7,9 @@ import os
 import json
 import uuid
 
+# ===== ML 血糖预测模型集成 =====
+from glucose_predictor import GlucosePredictor
+
 # ===== 依赖自检 =====
 missing_pkgs = []
 required_pkgs = {
@@ -22,6 +25,7 @@ required_pkgs = {
     "faiss": "faiss-cpu",
     "pypdf": "pypdf",
     "torchvision": "torchvision",
+    "lightgbm": "lightgbm",
 }
 for mod, pkg in required_pkgs.items():
     try:
@@ -502,6 +506,50 @@ post_templates = prompts.post_templates
 # 干预效果预测模板（基于相似患者结局）；若覆盖文件未提供则为 None，预测功能将优雅降级
 prediction_template = getattr(prompts, "prediction_template", None)
 
+# ============================================
+# ML 血糖预测器（懒加载 + Streamlit 缓存）
+# ============================================
+@st.cache_resource
+def load_ml_predictor():
+    """缓存加载 LightGBM 预测模型。首次加载约 1-2 秒。"""
+    try:
+        predictor = GlucosePredictor()
+        predictor._ensure_loaded()
+        return predictor
+    except Exception as e:
+        st.warning(f"⚠ ML 预测模型加载失败: {e}")
+        return None
+
+def get_ml_prediction_context(predictor, patient_data):
+    """调用 ML 模型生成预测上下文文本，返回 (context_text, model_n)。"""
+    if predictor is None:
+        return ("【机器学习模型预测】⚠ 模型未加载。本次仅基于相似患者结局预测。", 0)
+    try:
+        result = predictor.predict_from_dict(patient_data)
+        meta = predictor._meta or {}
+        lines = [
+            "【机器学习模型预测（LightGBM 回归）】",
+            f"  模型: 基于 {meta.get('n_fpg', 7342)} 例 T2DM 患者训练, 5-fold CV R²≈0.45, MAE≈1.06 mmol/L",
+            f"  数据完整度: {result['n_provided']}/{result['n_total']} 项已提供",
+        ]
+        if result["missing_features"]:
+            cn_names = []
+            for f in result["missing_features"]:
+                cn_names.append(f.replace("干预前_", "").replace("PG_", "PG"))
+            lines.append(f"  缺失填补: KNN 估算了 {', '.join(cn_names)}")
+        lines.append(f"  预测干预后 FPG: {result['post_fpg']} mmol/L")
+        if "delta_fpg" in result:
+            d = "↓" if result["delta_fpg"] > 0 else ("↑" if result["delta_fpg"] < 0 else "→")
+            lines.append(f"    ΔFPG: {d} {abs(result['delta_fpg'])} mmol/L")
+        lines.append(f"  预测干预后 PG120: {result['post_pg120']} mmol/L")
+        if "delta_pg120" in result:
+            d = "↓" if result["delta_pg120"] > 0 else ("↑" if result["delta_pg120"] < 0 else "→")
+            lines.append(f"    ΔPG120: {d} {abs(result['delta_pg120'])} mmol/L")
+        lines.append("  [说明] 该预测为统计估计值。实际效果因个体差异可能有所不同。")
+        return ("\n".join(lines), meta.get("n_fpg", 7342))
+    except Exception as e:
+        return (f"【机器学习模型预测】⚠ 预测失败 ({e})。请仅基于相似患者结局预测。", 0)
+
 @st.cache_resource
 def load_knowledge_base():
     tmp_dir = load_encrypted_assets()
@@ -658,6 +706,12 @@ def generate_plan(patient_combined_data: dict) -> str:
             similar_ref = f"（相似患者检索失败：{_e}，请基于临床经验预测）"
             outcome_stats = "（无）"
 
+    # ML 血糖预测（干预前模式）
+    ml_context, ml_model_n = "", 0
+    if mode == "pre":
+        ml_predictor = load_ml_predictor()
+        ml_context, ml_model_n = get_ml_prediction_context(ml_predictor, patient_combined_data)
+
     invoke_input = {
         "input": input_text,
         **base_data,
@@ -670,6 +724,8 @@ def generate_plan(patient_combined_data: dict) -> str:
         "history_followups": history_text,
         "similar_patients_reference": similar_ref,
         "outcome_statistics": outcome_stats,
+        "ml_prediction_context": ml_context,
+        "ml_model_n": ml_model_n,
     }
     result = rag_chain.invoke(invoke_input)
     return result["answer"]
@@ -1029,6 +1085,10 @@ def predict_intervention_effect(new_patient, similar_patients):
         )
     agg_text = "\n".join(agg_lines) if agg_lines else "（结局数据不足）"
 
+    # ML 血糖预测
+    ml_predictor = load_ml_predictor()
+    ml_context, ml_model_n = get_ml_prediction_context(ml_predictor, new_patient)
+
     def symptom_dict_to_str(sd):
         if not sd or not isinstance(sd, dict):
             return "无数据"
@@ -1058,6 +1118,8 @@ def predict_intervention_effect(new_patient, similar_patients):
         "similar_patients_reference": similar_context,
         "outcome_statistics": agg_text,
         "similar_count": len(similar_patients),
+        "ml_prediction_context": ml_context,
+        "ml_model_n": ml_model_n,
     }
     try:
         resp = chain.invoke(invoke_input)
@@ -1120,6 +1182,20 @@ def patient_info_entry():
     if st.button("🔄 重新加载云端数据"):
         st.session_state.loaded_from_cloud = False
         st.rerun()
+
+    # ML 预测模型状态
+    with st.sidebar:
+        with st.expander("🔬 ML 血糖预测模型"):
+            ml = load_ml_predictor()
+            if ml is not None:
+                meta = ml._meta or {}
+                st.success("✅ LightGBM 已就绪")
+                st.caption(f"FPG 模型: {meta.get('n_fpg', '?')} 例训练")
+                st.caption(f"PG120 模型: {meta.get('n_pg120', '?')} 例训练")
+                st.caption("精度: R²≈0.45, MAE≈1.06 mmol/L")
+            else:
+                st.warning("⚠ 模型未加载")
+                st.caption("请检查 glucose_model/ 目录")
 
     # 患者选择（按提交者ID过滤）
     if is_admin:
