@@ -66,6 +66,17 @@ def _resolve_key(patient, internal_key, required=False):
         required: 若为 True, 所有别名均未命中时抛出 ValueError; 否则返回 None
     """
     aliases = KEY_ALIASES.get(internal_key, [internal_key])
+    for k in aliases:
+        if k in patient:
+            v = patient.get(k)
+            if v is not None and v != "" and v != "nan":
+                return v
+    if required:
+        raise ValueError(
+            f"患者数据缺少关键特征 '{internal_key}'。"
+            f"请确保提供以下任一字段: {aliases}"
+        )
+    return None
 
 
 # 轨迹预测所需的最小特征集
@@ -79,11 +90,28 @@ def check_trajectory_readiness(patient):
         (ready: bool, missing: list[str], message: str)
     """
     missing = []
+
+    # 年龄: 优先直接字段, 其次出生日期推导
+    age_v = _resolve_age(patient, required=False)
+    if age_v is None:
+        has_age_key = any(k in patient for k in KEY_ALIASES.get("年龄", ["年龄"]))
+        has_birth = "出生日期" in patient or "birth_date" in patient
+        if has_age_key or has_birth:
+            missing.append("年龄（已记录出生日期但未填年龄，请填写出生日期以自动计算）")
+        else:
+            missing.append("年龄（请填写年龄或出生日期）")
+
     for ik in TRAJECTORY_REQUIRED:
+        if ik == "年龄":
+            continue  # 已在上面处理
         v = _resolve_key(patient, ik, required=False)
         if v is None:
             aliases = KEY_ALIASES.get(ik, [ik])
-            missing.append(f"{ik}（请提供 {' / '.join(aliases[:2])}）")
+            found_keys = [k for k in aliases if k in patient]
+            if found_keys:
+                missing.append(f"{ik}（已记录但值为空，请填写 {' / '.join(found_keys[:2])}）")
+            else:
+                missing.append(f"{ik}（请提供 {' / '.join(aliases[:2])}）")
         else:
             try:
                 float(v)
@@ -397,7 +425,7 @@ class GlucoseTrajectoryPredictor:
     def _modulate_params(self, patient):
         """根据患者特征调制衰减参数。返回 (A_fpg, tau, A_pg120, tau_pg120)。"""
         fpg = _resolve_float(patient, "干预前_FPG", required=True)
-        age = _resolve_float(patient, "年龄", required=True)
+        age = _resolve_age(patient, required=True)
         bmi = _resolve_float(patient, "BMI", required=True)
 
         fpg_ratio = np.clip(1.0 + (fpg - 9.0) / 3.0 * 0.2, 0.5, 1.8)
