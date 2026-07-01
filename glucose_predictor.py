@@ -79,6 +79,39 @@ def _resolve_key(patient, internal_key, required=False):
     return None
 
 
+def _resolve_age(patient, required=False):
+    """解析年龄, 优先从直接字段, 其次从出生日期计算。
+
+    Returns float or None; required=True 时缺失则抛出 ValueError.
+    """
+    v = _resolve_key(patient, "年龄", required=False)
+    if v is not None:
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            pass
+    # 出生日期 fallback
+    birth_date = patient.get("出生日期") or patient.get("birth_date")
+    if birth_date is not None:
+        try:
+            from datetime import date as dt_date
+            if isinstance(birth_date, str):
+                birth_date = dt_date.fromisoformat(birth_date[:10])
+            if isinstance(birth_date, dt_date):
+                today = dt_date.today()
+                age = today.year - birth_date.year
+                if (today.month, today.day) < (birth_date.month, birth_date.day):
+                    age -= 1
+                return float(age)
+        except Exception:
+            pass
+    if required:
+        raise ValueError(
+            "患者数据缺少年龄。请提供 '年龄' 字段或填写 '出生日期'。"
+        )
+    return None
+
+
 # 轨迹预测所需的最小特征集
 TRAJECTORY_REQUIRED = ["干预前_FPG", "干预前_PG_120min", "年龄", "BMI"]
 
