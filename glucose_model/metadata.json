@@ -33,6 +33,20 @@
   "fpg_std": 2.631930226379111,
   "pg120_mean": 11.711007988380539,
   "pg120_std": 4.309541874709054,
+  "trajectory_params": {
+    "description": "LNN衰减曲线参数, 基于 7,307 例 T1 数据的指数拟合: ΔFPG(t) = A × (1 - e^(-t/τ))",
+    "A_fpg": 2.62,
+    "tau_fpg": 49.0,
+    "A_pg120": 4.50,
+    "tau_pg120": 45.0,
+    "fitted_n": 7307,
+    "method": "scipy.optimize.curve_fit, weighted by sqrt(n)",
+    "r_squared_fit": 0.68,
+    "remission_criteria": {
+      "FPG": "< 7.0 mmol/L",
+      "PG120": "< 11.1 mmol/L"
+    }
+  },
   "feature_stats": {
     "年龄": {
       "mean": 63.14885665425725,
