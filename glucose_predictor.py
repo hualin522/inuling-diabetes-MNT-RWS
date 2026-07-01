@@ -40,6 +40,64 @@ FEATURES = [
     "干预前_PG_120min", "干预前_PG_180min",
 ]
 
+# 键名别名映射表: "底杠模型内部名" → ["Sheet 写入名", "英文名", ...]
+# 确保 PredictionQualityAssessor 和 trajectory 方法可以使用统一方式查找患者数据
+KEY_ALIASES = {
+    "年龄":        ["年龄", "干预前年龄", "age"],
+    "性别编码":     ["性别", "性别编码", "sex"],
+    "BMI":         ["BMI", "干预前BMI", "bmi"],
+    "病史_年":      ["病史年", "病史_年", "干预前病史年", "diseaseYears"],
+    "干预前_体感总分": ["干预前体感总分", "干预前_体感总分", "tcmScore"],
+    "干预前_FPG":   ["干预前FPG", "干预前_FPG", "fpg", "干预前空腹血糖"],
+    "干预前_PG_30min":  ["干预前PG30", "干预前_PG_30min"],
+    "干预前_PG_60min":  ["干预前PG60", "干预前_PG_60min"],
+    "干预前_PG_120min": ["干预前PG120", "干预前_PG_120min", "pg120", "干预前餐后2h血糖"],
+    "干预前_PG_180min": ["干预前PG180", "干预前_PG_180min"],
+    "干预天数":     ["干预天数", "干预时长", "duration"],
+}
+
+
+def _resolve_key(patient, internal_key, required=False):
+    """将模型内部键名解析为患者字典中实际存在的键名对应的值。
+
+    Args:
+        patient: 患者数据字典
+        internal_key: 模型内部键名 (如 "干预前_FPG")
+        required: 若为 True, 所有别名均未命中时抛出 ValueError; 否则返回 None
+    """
+    aliases = KEY_ALIASES.get(internal_key, [internal_key])
+    for k in aliases:
+        v = patient.get(k)
+        if v is not None and v != "" and v != "nan":
+            return v
+    if required:
+        raise ValueError(
+            f"患者数据缺少关键特征 '{internal_key}'。"
+            f"请确保提供以下任一字段: {aliases}"
+        )
+    return None
+
+
+def _resolve_float(patient, internal_key, required=True):
+    """同 _resolve_key, 但尝试转为 float。"""
+    v = _resolve_key(patient, internal_key, required=required)
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        if required:
+            raise ValueError(
+                f"患者特征 '{internal_key}' 的值 '{v}' 无法转为数值"
+            )
+        return None
+
+FEATURES = [
+    "年龄", "性别编码", "BMI", "病史_年", "干预前_体感总分",
+    "干预前_FPG", "干预前_PG_30min", "干预前_PG_60min",
+    "干预前_PG_120min", "干预前_PG_180min",
+]
+
 FEATURE_DEFAULTS = {
     # 从训练集均值推算的典型默认值（当全部留空时的 fallback）
     "年龄": 66.0, "性别编码": 0.4, "BMI": 26.0, "病史_年": 18.0,
@@ -302,9 +360,9 @@ class GlucoseTrajectoryPredictor:
 
     def _modulate_params(self, patient):
         """根据患者特征调制衰减参数。返回 (A_fpg, tau, A_pg120, tau_pg120)。"""
-        fpg = float(patient.get("干预前FPG", patient.get("fpg", 9.0)))
-        age = float(patient.get("年龄", patient.get("age", 60)))
-        bmi = float(patient.get("干预前BMI", patient.get("bmi", 26)))
+        fpg = _resolve_float(patient, "干预前_FPG", required=True)
+        age = _resolve_float(patient, "年龄", required=True)
+        bmi = _resolve_float(patient, "BMI", required=True)
 
         fpg_ratio = np.clip(1.0 + (fpg - 9.0) / 3.0 * 0.2, 0.5, 1.8)
         age_ratio = np.clip(1.0 + (age - 60) / 10.0 * 0.1, 0.7, 1.4)
@@ -342,10 +400,9 @@ class GlucoseTrajectoryPredictor:
         except Exception:
             pass
 
-        pre_fpg = float(patient.get("干预前FPG", patient.get("fpg",
-                          static_pred.get("pre_fpg", 9.0) if static_pred else 9.0)))
-        pre_pg120 = float(patient.get("干预前PG120", patient.get("pg120",
-                            static_pred.get("pre_pg120", 14.0) if static_pred else 14.0)))
+        # 基线: 使用统一键名解析器, 所有候选均未命中则抛出 ValueError
+        pre_fpg = _resolve_float(patient, "干预前_FPG", required=True)
+        pre_pg120 = _resolve_float(patient, "干预前_PG_120min", required=True)
 
         delta_fpg = self._decay(days_arr, A_fpg, tau)
         delta_pg120 = self._decay(days_arr, A_pg120, tau_pg120)
@@ -378,8 +435,9 @@ class GlucoseTrajectoryPredictor:
     def estimate_remission(self, patient):
         """估算达成临床缓解 (FPG<7.0 且 PG120<11.1) 所需天数。"""
         A_fpg, tau, A_pg120, tau_pg120 = self._modulate_params(patient)
-        pre_fpg = float(patient.get("干预前FPG", patient.get("fpg", 9.0)))
-        pre_pg120 = float(patient.get("干预前PG120", patient.get("pg120", 14.0)))
+
+        pre_fpg = _resolve_float(patient, "干预前_FPG", required=True)
+        pre_pg120 = _resolve_float(patient, "干预前_PG_120min", required=True)
 
         def _inv_decay(target, pre, A, tau):
             delta_needed = pre - target
@@ -577,12 +635,12 @@ class PredictionQualityAssessor:
         scores = {}
         recommendations = []
 
-        # ---- 维度1: 数据完整度 ----
+        # ---- 维度1: 数据完整度 (使用统一键名解析器) ----
         provided_feats = []
         missing_feats = []
         for feat in FEATURES:
-            v = patient.get(feat)
-            if v is not None and v != "" and v != "nan":
+            v = _resolve_key(patient, feat, required=False)
+            if v is not None:
                 provided_feats.append(feat)
             else:
                 missing_feats.append(feat)
@@ -607,7 +665,7 @@ class PredictionQualityAssessor:
         # ---- 维度2: 模型置信度 (基于特征分布 + 缺失数) ----
         # 规则: 越接近训练集均值, 预测越可靠
         reliability_penalty = 0
-        fpg_raw = patient.get("干预前_FPG")
+        fpg_raw = _resolve_key(patient, "干预前_FPG", required=False)
         if fpg_raw is not None:
             try:
                 fpg_val = float(fpg_raw)
@@ -646,12 +704,12 @@ class PredictionQualityAssessor:
         else:
             expected_mae = (2.0, 4.0)
 
-        # ---- 维度3: 特征可靠性 ----
+        # ---- 维度3: 特征可靠性 (使用统一键名解析器) ----
         reliability = 100.0
         for feat in provided_feats:
             if feat in self._feature_means and feat in self._feature_stds:
                 try:
-                    val = float(patient[feat])
+                    val = _resolve_float(patient, feat, required=True)
                     mean = self._feature_means[feat]
                     std = max(self._feature_stds[feat], 1.0)
                     z = abs(val - mean) / std
