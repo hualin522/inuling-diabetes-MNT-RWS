@@ -2290,7 +2290,7 @@ def patient_info_entry():
                     plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
                     # 可选：将方案存入患者数据
-                    #patient_for_plan["AI方案"] = plan
+                    patient_for_plan["AI方案"] = plan
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
