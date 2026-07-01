@@ -8,13 +8,7 @@ import json
 import uuid
 
 # ===== ML 血糖预测模型集成 =====
-from glucose_predictor import (
-    GlucosePredictor, GlucoseTrajectoryPredictor,
-    get_predictor, get_trajectory_predictor,
-    multi_timepoint_prediction, FPG_REMISSION, PG120_REMISSION,
-    PredictionQualityAssessor, assess_prediction_quality,
-    check_trajectory_readiness,
-)
+from glucose_predictor import GlucosePredictor
 
 # ===== 依赖自检 =====
 missing_pkgs = []
@@ -714,40 +708,9 @@ def generate_plan(patient_combined_data: dict) -> str:
 
     # ML 血糖预测（干预前模式）
     ml_context, ml_model_n = "", 0
-    trajectory_context = ""
-    traj_result = None  # 确保变量在 except 后仍存在
-    quality_context = "(未进行质量评估)"
     if mode == "pre":
         ml_predictor = load_ml_predictor()
         ml_context, ml_model_n = get_ml_prediction_context(ml_predictor, patient_combined_data)
-
-        # 多时间点轨迹预测 —— 先检查数据是否就绪
-        ready, missing, traj_status_msg = check_trajectory_readiness(patient_combined_data)
-        if ready:
-            try:
-                traj_result = multi_timepoint_prediction(patient_combined_data,
-                                                          similar_patients or [],
-                                                          timepoints=(15, 30, 90))
-                trajectory_context = traj_result.get("summary_text", "")
-                # 预测质量评估
-                try:
-                    quality = assess_prediction_quality(patient_combined_data,
-                        static_result=ml_predictor.predict_from_dict(patient_combined_data),
-                        trajectory_result=traj_result.get("trajectory"),
-                        similar_benchmarks=traj_result.get("benchmarks"))
-                    quality_context = quality["summary"]
-                except Exception:
-                    pass
-            except Exception:
-                # 数据就绪但计算失败（非预期错误）
-                trajectory_context = "（轨迹预测计算异常，请联系技术支持）"
-        else:
-            # 数据未就绪 —— 给 LLM 提供明确的缺失信息
-            trajectory_context = traj_status_msg
-
-        # 将轨迹预测（或未就绪说明）合并到 ML 预测上下文中
-        if trajectory_context:
-            ml_context = ml_context + "\n\n" + trajectory_context
 
     invoke_input = {
         "input": input_text,
@@ -763,8 +726,6 @@ def generate_plan(patient_combined_data: dict) -> str:
         "outcome_statistics": outcome_stats,
         "ml_prediction_context": ml_context,
         "ml_model_n": ml_model_n,
-        "trajectory_context": trajectory_context,
-        "quality_assessment": quality_context,
     }
     result = rag_chain.invoke(invoke_input)
     return result["answer"]
@@ -1128,18 +1089,6 @@ def predict_intervention_effect(new_patient, similar_patients):
     ml_predictor = load_ml_predictor()
     ml_context, ml_model_n = get_ml_prediction_context(ml_predictor, new_patient)
 
-    # 预测质量评估
-    try:
-        traj_result = multi_timepoint_prediction(new_patient, similar_patients, timepoints=(15, 30, 90))
-        static_result = ml_predictor.predict_from_dict(new_patient) if ml_predictor else None
-        quality = assess_prediction_quality(new_patient,
-            static_result=static_result,
-            trajectory_result=traj_result.get("trajectory"),
-            similar_benchmarks=traj_result.get("benchmarks"))
-        quality_context = quality["summary"]
-    except Exception:
-        quality_context = "预测质量评估暂时不可用"
-
     def symptom_dict_to_str(sd):
         if not sd or not isinstance(sd, dict):
             return "无数据"
@@ -1171,95 +1120,12 @@ def predict_intervention_effect(new_patient, similar_patients):
         "similar_count": len(similar_patients),
         "ml_prediction_context": ml_context,
         "ml_model_n": ml_model_n,
-        "quality_assessment": quality_context,
     }
     try:
         resp = chain.invoke(invoke_input)
         return resp.content
     except Exception as e:
         return f"❌ 预测生成失败：{e}"
-
-
-# ============================================
-# 多时间点轨迹预测 (LNN + 相似案例)
-# ============================================
-@st.cache_resource
-def load_trajectory_predictor():
-    """缓存加载轨迹预测器。"""
-    return get_trajectory_predictor()
-
-
-def predict_multistep_effect(new_patient, similar_patients,
-                              timepoints=(15, 30, 90)):
-    """
-    多时间点干预效果预测 —— 组合 LNN 衰减曲线 + ML 单点预测 + 相似案例校准。
-
-    Returns:
-        dict with keys: trajectory, benchmarks, remission, summary_text
-    """
-    tp = load_trajectory_predictor()
-    return tp.predict_with_similar_cases(new_patient, similar_patients, timepoints)
-
-
-def format_multistep_display(result):
-    """
-    将多时间点预测结果格式化为 Streamlit 展示用的结构化文本。
-    同时返回用于注入 AI prompt 的结构化摘要。
-    """
-    if not result:
-        return "⚠ 预测数据不足。", ""
-
-    traj = result.get("trajectory", {})
-    remission = result.get("remission", {})
-    benchmarks = result.get("benchmarks", {})
-
-    lines = ["### 📈 多时间点血糖轨迹预测 (LNN)", ""]
-    lines.append("**基于 7,307 例衰减曲线 + 个性化参数调制**")
-    lines.append("")
-
-    # 多时间点表格
-    days = np.atleast_1d(traj.get("days", []))
-    fpgs = np.atleast_1d(traj.get("fpg", []))
-    pg120s = np.atleast_1d(traj.get("pg120", []))
-    deltas_f = np.atleast_1d(traj.get("delta_fpg", []))
-    deltas_p = np.atleast_1d(traj.get("delta_pg120", []))
-
-    # 表格头
-    lines.append("| 时间点 | 预测 FPG | 预测 PG120 | ΔFPG | ΔPG120 |")
-    lines.append("|:---:|:---:|:---:|:---:|:---:|")
-
-    for i in range(len(days)):
-        f_emoji = "✅" if fpgs[i] < FPG_REMISSION else ("🟡" if fpgs[i] < 8.0 else "🔴")
-        p_emoji = "✅" if pg120s[i] < PG120_REMISSION else ("🟡" if pg120s[i] < 13.0 else "🔴")
-        lines.append(f"| {int(days[i])} 天 | {f_emoji} {fpgs[i]:.1f} | {p_emoji} {pg120s[i]:.1f} | "
-                     f"{deltas_f[i]:.1f} | {deltas_p[i]:.1f} |")
-
-    lines.append("")
-    lines.append(f"*个性化参数: A_FPG={traj.get('a_fpg',0):.1f}, "
-                 f"τ={traj.get('tau_fpg',0):.0f}d*")
-    lines.append("")
-
-    # 缓解时间
-    lines.append("### 🏥 临床缓解预估")
-    lines.append(f"标准: FPG < {FPG_REMISSION}, PG120 < {PG120_REMISSION}")
-    if remission.get("combined_days"):
-        lines.append(f"> 预计 **{remission['combined_days']:.0f} 天** "
-                     f"({remission['combined_days']/30:.1f} 月) "
-                     f"达成临床缓解")
-    else:
-        lines.append("> ⚠ 以群组平均成效估算，难以达成缓解。建议联合药物治疗。")
-    lines.append("")
-
-    # 相似案例基准
-    if benchmarks.get("similar_median_delta_fpg"):
-        lines.append(f"> 📊 相似患者 ({benchmarks['n_similar']} 例) 中位改善: "
-                     f"ΔFPG={benchmarks['similar_median_delta_fpg']}, "
-                     f"中位干预={benchmarks.get('similar_median_duration','?')}d")
-
-    display = "\n".join(lines)
-    summary = result.get("summary_text", "")
-
-    return display, summary
 
 
 # ============================================
