@@ -66,6 +66,42 @@ def _resolve_key(patient, internal_key, required=False):
         required: 若为 True, 所有别名均未命中时抛出 ValueError; 否则返回 None
     """
     aliases = KEY_ALIASES.get(internal_key, [internal_key])
+
+
+# 轨迹预测所需的最小特征集
+TRAJECTORY_REQUIRED = ["干预前_FPG", "干预前_PG_120min", "年龄", "BMI"]
+
+
+def check_trajectory_readiness(patient):
+    """检查患者数据是否满足轨迹预测的最小要求。
+
+    Returns:
+        (ready: bool, missing: list[str], message: str)
+    """
+    missing = []
+    for ik in TRAJECTORY_REQUIRED:
+        v = _resolve_key(patient, ik, required=False)
+        if v is None:
+            aliases = KEY_ALIASES.get(ik, [ik])
+            missing.append(f"{ik}（请提供 {' / '.join(aliases[:2])}）")
+        else:
+            try:
+                float(v)
+            except (ValueError, TypeError):
+                aliases = KEY_ALIASES.get(ik, [ik])
+                missing.append(f"{ik}（当前值 '{v}' 不是有效数值，请提供 {' / '.join(aliases[:2])}）")
+
+    if not missing:
+        return True, [], ""
+
+    msg_lines = [
+        "【轨迹预测 未启用】",
+        f"缺少以下关键信息，无法生成多时间点血糖轨迹:",
+    ]
+    for m in missing:
+        msg_lines.append(f"  • {m}")
+    msg_lines.append("补充上述信息后可自动生成15天/30天/90天血糖改善预测。")
+    return False, missing, "\n".join(msg_lines)
     for k in aliases:
         v = patient.get(k)
         if v is not None and v != "" and v != "nan":

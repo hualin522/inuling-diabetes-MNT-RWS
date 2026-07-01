@@ -13,6 +13,7 @@ from glucose_predictor import (
     get_predictor, get_trajectory_predictor,
     multi_timepoint_prediction, FPG_REMISSION, PG120_REMISSION,
     PredictionQualityAssessor, assess_prediction_quality,
+    check_trajectory_readiness,
 )
 
 # ===== 依赖自检 =====
@@ -714,32 +715,39 @@ def generate_plan(patient_combined_data: dict) -> str:
     # ML 血糖预测（干预前模式）
     ml_context, ml_model_n = "", 0
     trajectory_context = ""
+    traj_result = None  # 确保变量在 except 后仍存在
+    quality_context = "(未进行质量评估)"
     if mode == "pre":
         ml_predictor = load_ml_predictor()
         ml_context, ml_model_n = get_ml_prediction_context(ml_predictor, patient_combined_data)
-        # 多时间点轨迹预测
-        try:
-            traj_result = multi_timepoint_prediction(patient_combined_data,
-                                                      similar_patients or [],
-                                                      timepoints=(15, 30, 90))
-            trajectory_context = traj_result.get("summary_text", "")
-        except Exception:
-            trajectory_context = "(轨迹预测暂时不可用)"
-        # 将轨迹预测合并到 ML 预测上下文中，确保方案模板也能使用
+
+        # 多时间点轨迹预测 —— 先检查数据是否就绪
+        ready, missing, traj_status_msg = check_trajectory_readiness(patient_combined_data)
+        if ready:
+            try:
+                traj_result = multi_timepoint_prediction(patient_combined_data,
+                                                          similar_patients or [],
+                                                          timepoints=(15, 30, 90))
+                trajectory_context = traj_result.get("summary_text", "")
+                # 预测质量评估
+                try:
+                    quality = assess_prediction_quality(patient_combined_data,
+                        static_result=ml_predictor.predict_from_dict(patient_combined_data),
+                        trajectory_result=traj_result.get("trajectory"),
+                        similar_benchmarks=traj_result.get("benchmarks"))
+                    quality_context = quality["summary"]
+                except Exception:
+                    pass
+            except Exception:
+                # 数据就绪但计算失败（非预期错误）
+                trajectory_context = "（轨迹预测计算异常，请联系技术支持）"
+        else:
+            # 数据未就绪 —— 给 LLM 提供明确的缺失信息
+            trajectory_context = traj_status_msg
+
+        # 将轨迹预测（或未就绪说明）合并到 ML 预测上下文中
         if trajectory_context:
             ml_context = ml_context + "\n\n" + trajectory_context
-
-        # 预测质量评估 (仅干预前模式)
-        quality_context = "(未进行质量评估)"
-        if ml_predictor is not None:
-            try:
-                quality = assess_prediction_quality(patient_combined_data,
-                    static_result=ml_predictor.predict_from_dict(patient_combined_data),
-                    trajectory_result=traj_result.get("trajectory") if traj_result else None,
-                    similar_benchmarks=traj_result.get("benchmarks") if traj_result else None)
-                quality_context = quality["summary"]
-            except Exception:
-                pass
 
     invoke_input = {
         "input": input_text,
