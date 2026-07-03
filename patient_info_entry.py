@@ -304,6 +304,36 @@ def delete_patient_row_by_id(patient_id):
         return True
     return False
 
+def update_ai_plan_only(patient_id: str, ai_plan_text: str) -> bool:
+    """
+    仅更新指定患者的 AI 方案列（安全，不删除整行）。
+    返回 True/False 表示是否成功。
+    """
+    try:
+        sheet = get_sheet()
+        # 1. 获取表头，找到“AI方案”列的索引
+        header_row = sheet.row_values(1)
+        if "AI方案" not in header_row:
+            # 如果表头没有这一列，则追加（仅首次）
+            last_col = len(header_row) + 1
+            sheet.update_cell(1, last_col, "AI方案")
+            col_index = last_col
+        else:
+            col_index = header_row.index("AI方案") + 1  # gspread 列号从 1 开始
+
+        # 2. 查找该患者的行号
+        row_num = find_patient_row_by_id(patient_id)
+        if row_num is None:
+            st.error(f"未找到患者 ID: {patient_id}，无法更新 AI 方案")
+            return False
+
+        # 3. 直接更新该单元格
+        sheet.update_cell(row_num, col_index, ai_plan_text)
+        return True
+    except Exception as e:
+        st.error(f"更新 AI 方案失败: {e}")
+        return False
+    
 def save_to_google_sheets(patient_dict):
     try:
         sheet = get_sheet()
@@ -1357,7 +1387,7 @@ def patient_info_entry():
     if selected_patient_data:
         stored_project = selected_patient_data.get("项目/医疗地区", "")
         # 确定期望的项目类型和自定义文本
-        if stored_project in ["医疗", "合作项目", "金顶", "赢创"]:
+        if stored_project in ["医疗", "合作项目", "金顶", "赢创", "速逍堂"]:
             expected_type = stored_project
             expected_custom = ""
         elif stored_project and stored_project.strip():
@@ -1396,7 +1426,7 @@ def patient_info_entry():
     with col_proj1:
         project_type = st.selectbox(
             "项目类型",
-            ["医疗", "合作项目", "金顶", "赢创", "其他"],
+            ["医疗", "合作项目", "金顶", "赢创", "速逍堂", "其他"],
             key="project_type_select"
         )
     with col_proj2:
@@ -1422,7 +1452,9 @@ def patient_info_entry():
         elif project_region == "金顶":
             return ["清谷夫", "唐平匠", "唐来匠", "其他营养治疗"]
         elif project_region == "赢创":
-            return ["益比特畅清", "益比特修畅元", "益比特修夷稳", "其他营养治疗"]                
+            return ["益比特畅清", "益比特修畅元", "益比特修夷稳", "其他营养治疗"]         
+        elif project_region == "速逍堂":
+            return ["轻畅", "顺畅", "其他营养治疗"]            
         else:
             # 自定义项目或未匹配，提供通用选项（沿用原有带斜杠的展示方式）
             return ["畅快/清畅", "纽畅/唐畅", "纽畅B/唐畅B", "其他营养治疗"]
@@ -2289,8 +2321,24 @@ def patient_info_entry():
                 try:
                     plan = generate_plan(patient_for_plan)
                     st.session_state.ai_plan = plan
-                    # 可选：将方案存入患者数据
-                    patient_for_plan["AI方案"] = plan
+                    
+                    # --- 安全更新：仅写入 AI 方案列 ---
+                    patient_id = patient_for_plan.get("患者ID")
+                    if patient_id:
+                        success = update_ai_plan_only(patient_id, plan)
+                        if success:
+                            # 同步本地内存数据
+                            patient_for_plan["AI方案"] = plan
+                            for i, p in enumerate(st.session_state.patients):
+                                if p.get("患者ID") == patient_id:
+                                    st.session_state.patients[i] = patient_for_plan
+                                    break
+                            st.success("✅ AI方案已保存到云端")
+                        else:
+                            st.warning("⚠️ AI方案生成成功，但云端保存失败，请检查网络后重试")
+                    else:
+                        st.warning("⚠️ 患者ID缺失，方案仅保存在本地，未同步云端")
+                        
                 except Exception as e:
                     st.session_state.ai_plan = f"❌ 生成失败：{str(e)}"
         if st.session_state.get("ai_plan"):
